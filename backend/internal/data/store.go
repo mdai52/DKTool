@@ -43,7 +43,7 @@ func NewStore(dbPath string) (*Store, error) {
 		db.Close()
 		return nil, err
 	}
-	if err := SyncExternalPointMedia(db); err != nil {
+	if err := SyncExternalSeeds(db); err != nil {
 		db.Close()
 		return nil, err
 	}
@@ -112,6 +112,7 @@ func (s *Store) migrate() error {
 			caption TEXT NOT NULL,
 			description TEXT NOT NULL,
 			theme TEXT NOT NULL,
+			tile_source_json TEXT NOT NULL DEFAULT '',
 			default_variant_slug TEXT NOT NULL,
 			default_floor_slug TEXT NOT NULL,
 			sort_order INTEGER NOT NULL,
@@ -217,6 +218,9 @@ func (s *Store) migrate() error {
 	}
 
 	if err := s.ensurePointMediaColumns(); err != nil {
+		return err
+	}
+	if err := s.ensureMapTileSourceColumn(); err != nil {
 		return err
 	}
 
@@ -379,7 +383,7 @@ func (s *Store) fetchModes() ([]domain.ModeSummary, error) {
 func (s *Store) fetchMaps(modeSlug string) ([]domain.MapSummary, error) {
 	maps := make([]domain.MapSummary, 0)
 	rows, err := s.db.Query(`
-		SELECT maps.slug, maps.name, maps.caption, maps.description, maps.theme, maps.default_variant_slug, maps.default_floor_slug
+		SELECT maps.slug, maps.name, maps.caption, maps.description, maps.theme, maps.tile_source_json, maps.default_variant_slug, maps.default_floor_slug
 		FROM maps
 		JOIN modes ON maps.mode_id = modes.id
 		WHERE modes.slug = ?
@@ -391,11 +395,15 @@ func (s *Store) fetchMaps(modeSlug string) ([]domain.MapSummary, error) {
 
 	for rows.Next() {
 		var summary domain.MapSummary
+		var rawTileSource string
 		if err := rows.Scan(
 			&summary.Slug, &summary.Name, &summary.Caption, &summary.Description,
-			&summary.Theme, &summary.DefaultVariant, &summary.DefaultFloor,
+			&summary.Theme, &rawTileSource, &summary.DefaultVariant, &summary.DefaultFloor,
 		); err != nil {
 			return nil, err
+		}
+		if strings.TrimSpace(rawTileSource) != "" && json.Valid([]byte(rawTileSource)) {
+			summary.TileSource = json.RawMessage(rawTileSource)
 		}
 		maps = append(maps, summary)
 	}
@@ -767,6 +775,19 @@ func (s *Store) ensurePointMediaColumns() error {
 	}
 
 	_, err = s.db.Exec(`ALTER TABLE points ADD COLUMN image_urls TEXT NOT NULL DEFAULT '[]'`)
+	return err
+}
+
+func (s *Store) ensureMapTileSourceColumn() error {
+	hasTileSource, err := s.hasColumn("maps", "tile_source_json")
+	if err != nil {
+		return err
+	}
+	if hasTileSource {
+		return nil
+	}
+
+	_, err = s.db.Exec(`ALTER TABLE maps ADD COLUMN tile_source_json TEXT NOT NULL DEFAULT ''`)
 	return err
 }
 

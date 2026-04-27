@@ -4,6 +4,10 @@ const props = defineProps({
     type: Object,
     default: null
   },
+  atlasMode: {
+    type: Boolean,
+    default: false
+  },
   modeSlug: {
     type: String,
     default: ''
@@ -22,7 +26,7 @@ const items = [
 </script>
 
 <template>
-  <aside class="toolbar-rail" :class="{ 'toolbar-rail--rocom': modeSlug === 'rock-kingdom' }">
+  <aside class="toolbar-rail" :class="{ 'toolbar-rail--rocom': atlasMode }">
     <div class="toolbar-rail__event" v-if="activeEvent">
       <span>事件热区</span>
       <strong>{{ activeEvent.name }}</strong>

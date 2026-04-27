@@ -1,6 +1,10 @@
-import { readFileSync } from 'node:fs'
+import { readFileSync, readdirSync } from 'node:fs'
+import path from 'node:path'
+import { fileURLToPath } from 'node:url'
 
-const rocomDataset = loadExternalDataset()
+const __dirname = path.dirname(fileURLToPath(import.meta.url))
+const externalDatasets = loadExternalDatasets()
+const externalModes = summarizeExternalModes(externalDatasets)
 
 const modes = [
   {
@@ -17,13 +21,7 @@ const modes = [
     description: '分阶段据点、载具补给与火力支援的部署视图。',
     accent: '#f0ca5b'
   },
-  {
-    slug: rocomDataset.mode.slug,
-    name: rocomDataset.mode.name,
-    subtitle: rocomDataset.mode.subtitle,
-    description: rocomDataset.mode.description,
-    accent: rocomDataset.mode.accent
-  }
+  ...externalModes
 ]
 
 const extractionLayerGroups = [
@@ -340,12 +338,12 @@ const warfareMaps = [
   })
 ]
 
-const rockKingdomMaps = [buildExternalMap(rocomDataset.map)]
+const externalMapsByMode = buildExternalMapsByMode(externalDatasets)
 
 const mapsByMode = {
   extraction: extractionMaps,
   warfare: warfareMaps,
-  'rock-kingdom': rockKingdomMaps
+  ...externalMapsByMode
 }
 
 function createExtractionMap(config) {
@@ -545,30 +543,95 @@ function summarizeMaps(list) {
     caption: map.caption,
     description: map.description,
     theme: map.theme,
+    tileSource: map.tileSource,
     defaultVariant: map.defaultVariant,
     defaultFloor: map.defaultFloor
   }))
 }
 
-function loadExternalDataset() {
-  const body = readFileSync(new URL('../backend/internal/data/static/rocom-world.json', import.meta.url), 'utf8')
-  return JSON.parse(body)
+function loadExternalDatasets() {
+  const staticDir = path.resolve(__dirname, '../backend/internal/data/static')
+  return readdirSync(staticDir)
+    .filter((name) => name.toLowerCase().endsWith('.json'))
+    .sort()
+    .map((name) => JSON.parse(readFileSync(path.join(staticDir, name), 'utf8')))
 }
 
-function proxyRocomImageURL(sourceURL) {
-  if (!sourceURL?.trim()) return ''
-  return `/api/assets/image/rocom/${Buffer.from(sourceURL.trim()).toString('base64url')}`
+function summarizeExternalModes(datasets) {
+  const lookup = new Map()
+  for (const dataset of datasets) {
+    if (!dataset?.mode?.slug) continue
+    lookup.set(dataset.mode.slug, {
+      slug: dataset.mode.slug,
+      name: dataset.mode.name,
+      subtitle: dataset.mode.subtitle,
+      description: dataset.mode.description,
+      accent: dataset.mode.accent,
+      sort: dataset.mode.sort ?? 999
+    })
+  }
+  return [...lookup.values()]
+    .sort((left, right) => (left.sort - right.sort) || left.slug.localeCompare(right.slug))
+    .map(({ sort, ...mode }) => mode)
 }
 
-function localizeRocomImageURLs(imageUrls = []) {
+function buildExternalMapsByMode(datasets) {
+  const grouped = {}
+  for (const dataset of datasets) {
+    const map = buildExternalMap(dataset.map)
+    grouped[map.modeSlug] ??= []
+    grouped[map.modeSlug].push(map)
+  }
+
+  Object.values(grouped).forEach((maps) => {
+    maps.sort((left, right) => (left.sort ?? 0) - (right.sort ?? 0) || left.slug.localeCompare(right.slug))
+  })
+
+  return grouped
+}
+
+function proxyRemoteImageURL(sourceURL) {
+  const normalized = sourceURL?.trim()
+  if (!normalized) return ''
+  if (normalized.startsWith('/api/assets/')) return normalized
+  if (/17173cdn\.com/i.test(normalized)) {
+    return `/api/assets/image/rocom/${Buffer.from(normalized).toString('base64url')}`
+  }
+  if (/gamersky\.com/i.test(normalized)) {
+    return `/api/assets/image/gamersky/${Buffer.from(normalized).toString('base64url')}`
+  }
+  return ''
+}
+
+function localizeRemoteImageURLs(imageUrls = []) {
   const seen = new Set()
   return imageUrls
-    .map((item) => proxyRocomImageURL(item))
+    .map((item) => proxyRemoteImageURL(item))
     .filter((item) => {
       if (!item || seen.has(item)) return false
       seen.add(item)
       return true
     })
+}
+
+function normalizeExternalTileSource(tileSource) {
+  if (!tileSource || typeof tileSource !== 'object') return null
+
+  const normalized = structuredClone(tileSource)
+  if (!normalized.urlTemplate && normalized.keyPrefix) {
+    if (String(normalized.keyPrefix).startsWith('tile/rocom/')) {
+      normalized.urlTemplate = `/api/assets/${normalized.keyPrefix}/{z}/{y}_{x}.png`
+      normalized.tileSize ??= 256
+      normalized.noWrap ??= true
+    }
+  }
+  if (!Number.isFinite(normalized.initLat) && normalized.initCenter?.lat != null) {
+    normalized.initLat = normalized.initCenter.lat
+  }
+  if (!Number.isFinite(normalized.initLng) && normalized.initCenter?.lng != null) {
+    normalized.initLng = normalized.initCenter.lng
+  }
+  return normalized
 }
 
 function buildExternalMap(rawMap) {
@@ -579,6 +642,8 @@ function buildExternalMap(rawMap) {
     caption: rawMap.caption,
     description: rawMap.description,
     theme: rawMap.theme,
+    sort: rawMap.sort ?? 0,
+    tileSource: normalizeExternalTileSource(rawMap.tileSource),
     defaultVariant: rawMap.defaultVariant,
     defaultFloor: rawMap.defaultFloor,
     variants: rawMap.variants.map((item) => ({
@@ -616,7 +681,7 @@ function buildExternalMap(rawMap) {
     })),
     points: rawMap.points.map((point) => ({
       ...point,
-      imageUrls: localizeRocomImageURLs(point.imageUrls)
+      imageUrls: localizeRemoteImageURLs(point.imageUrls)
     }))
   }
 }

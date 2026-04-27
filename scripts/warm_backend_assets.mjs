@@ -1,14 +1,10 @@
 import { execFile } from 'node:child_process'
-import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs'
+import { existsSync, mkdtempSync, rmSync } from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
-import { fileURLToPath } from 'node:url'
 import { promisify } from 'node:util'
 
 const execFileAsync = promisify(execFile)
-const __dirname = path.dirname(fileURLToPath(import.meta.url))
-const root = path.resolve(__dirname, '..')
-const rocomPath = path.join(root, 'backend/internal/data/static/rocom-world.json')
 
 const requestedBaseURL = process.env.DKTOOL_BASE_URL?.replace(/\/$/, '') || ''
 const allowPreview = /^(1|true|yes|on)$/i.test(process.env.DKTOOL_ALLOW_PREVIEW_WARM || '')
@@ -36,62 +32,32 @@ function includesScope(scope) {
   return scopes.has('all') || scopes.has(scope)
 }
 
-function buildInitialRocomTileKeys() {
-  const keys = []
-
-  for (let y = 2035; y <= 2044; y += 1) {
-    for (let x = 2036; x <= 2045; x += 1) {
-      keys.push(`/api/assets/tile/rocom/4010_v3_7f2d9c/12/${y}_${x}.png`)
-    }
+function addAssetPath(assetPaths, candidate) {
+  if (typeof candidate === 'string' && candidate.startsWith('/api/assets/')) {
+    assetPaths.add(candidate)
   }
-
-  for (let y = 1017; y <= 1022; y += 1) {
-    for (let x = 1017; x <= 1022; x += 1) {
-      keys.push(`/api/assets/tile/rocom/4010_v3_7f2d9c/11/${y}_${x}.png`)
-    }
-  }
-
-  return keys
 }
 
-function buildRocomIconKeys(payload) {
-  const keys = new Set()
+function buildAssetPathsFromView(payload) {
+  const assetPaths = new Set()
+  const layerGroups = payload.layerGroups ?? payload.map?.layerGroups ?? []
+  const points = payload.points ?? payload.map?.points ?? []
 
-  for (const group of payload.map?.layerGroups ?? []) {
+  for (const group of layerGroups) {
     for (const layer of group.layers ?? []) {
-      if (layer.icon?.startsWith('/api/assets/')) {
-        keys.add(layer.icon)
-      }
+      addAssetPath(assetPaths, layer.icon)
     }
   }
 
-  for (const point of payload.map?.points ?? []) {
-    if (point.layerIcon?.startsWith('/api/assets/')) {
-      keys.add(point.layerIcon)
-    }
-  }
-
-  return [...keys]
-}
-
-function buildRocomDetailImageKeys(payload) {
-  const keys = new Set()
-
-  for (const point of payload.map?.points ?? []) {
+  for (const point of points) {
+    addAssetPath(assetPaths, point.layerIcon)
+    if (!includeRocomDetailImages) continue
     for (const imageURL of point.imageUrls ?? []) {
-      const normalized = proxyRocomImageURL(imageURL)
-      if (normalized) {
-        keys.add(normalized)
-      }
+      addAssetPath(assetPaths, imageURL)
     }
   }
 
-  return [...keys]
-}
-
-function proxyRocomImageURL(sourceURL) {
-  if (!sourceURL?.trim()) return ''
-  return `/api/assets/image/rocom/${Buffer.from(sourceURL.trim()).toString('base64url')}`
+  return [...assetPaths]
 }
 
 async function fetchJSON(url) {
@@ -100,6 +66,35 @@ async function fetchJSON(url) {
     throw new Error(`${response.status} ${response.statusText} for ${url}`)
   }
   return response.json()
+}
+
+async function fetchMapView(baseURL, params) {
+  const query = new URLSearchParams(params)
+  return fetchJSON(`${baseURL}/api/map-view?${query.toString()}`)
+}
+
+async function collectModeViews(baseURL, modeSlug) {
+  const summary = await fetchMapView(baseURL, { mode: modeSlug })
+  const details = []
+
+  for (const map of summary.maps ?? []) {
+    details.push(await fetchMapView(baseURL, { mode: modeSlug, map: map.slug }))
+  }
+
+  return details
+}
+
+async function collectModeAssetPaths(baseURL, modeSlug) {
+  const details = await collectModeViews(baseURL, modeSlug)
+  const assetPaths = new Set()
+
+  for (const detail of details) {
+    for (const assetPath of buildAssetPathsFromView(detail)) {
+      assetPaths.add(assetPath)
+    }
+  }
+
+  return [...assetPaths]
 }
 
 async function resolveBaseURL() {
@@ -235,11 +230,11 @@ async function fetchAssetStats(baseURL) {
 }
 
 async function collectExtractionRoutes(baseURL) {
-  const payload = await fetchJSON(`${baseURL}/api/map-view?mode=extraction`)
+  const payload = await fetchMapView(baseURL, { mode: 'extraction' })
   const routes = []
 
   for (const map of payload.maps ?? []) {
-    const detail = await fetchJSON(`${baseURL}/api/map-view?mode=extraction&map=${map.slug}`)
+    const detail = await fetchMapView(baseURL, { mode: 'extraction', map: map.slug })
     const variant = detail.currentVariant || detail.variants?.[0]?.slug || 'regular'
     const floors = detail.floors?.length ? detail.floors : [{ slug: 'all' }]
     for (const floor of floors) {
@@ -264,11 +259,11 @@ async function collectExtractionRoutes(baseURL) {
 }
 
 async function collectWarfareRoutes(baseURL) {
-  const payload = await fetchJSON(`${baseURL}/api/map-view?mode=warfare`)
+  const payload = await fetchMapView(baseURL, { mode: 'warfare' })
   const routes = []
 
   for (const map of payload.maps ?? []) {
-    const detail = await fetchJSON(`${baseURL}/api/map-view?mode=warfare&map=${map.slug}`)
+    const detail = await fetchMapView(baseURL, { mode: 'warfare', map: map.slug })
     for (const variant of detail.variants ?? []) {
       const query = new URLSearchParams({
         mode: 'warfare',
@@ -309,13 +304,30 @@ async function collectRocomRoutes(baseURL) {
   ]
 }
 
-async function collectRocomAssetPaths() {
-  const payload = JSON.parse(readFileSync(rocomPath, 'utf8'))
-  return [...new Set([
-    ...buildRocomIconKeys(payload),
-    ...buildInitialRocomTileKeys(),
-    ...(includeRocomDetailImages ? buildRocomDetailImageKeys(payload) : [])
-  ])]
+async function collectKingsWorldRoutes(baseURL) {
+  if (!enableTileCoverage) {
+    return []
+  }
+
+  const details = await collectModeViews(baseURL, 'kings-world')
+  const routes = []
+
+  for (const detail of details) {
+    const query = new URLSearchParams({
+      mode: 'kings-world',
+      map: detail.currentMap.slug,
+      variant: detail.currentVariant || detail.variants?.[0]?.slug || 'world',
+      floor: detail.currentFloor || detail.floors?.[0]?.slug || 'all'
+    })
+    query.set('warmTiles', '1')
+    query.set('warmSettleMs', String(warmSettleMs))
+    routes.push({
+      label: `kings-world-${detail.currentMap.slug}-coverage`,
+      url: `${baseURL}/?${query.toString()}`
+    })
+  }
+
+  return routes
 }
 
 async function main() {
@@ -339,13 +351,18 @@ async function main() {
       browserRoutes.push(...await collectWarfareRoutes(baseURL))
     }
     if (includesScope('rocom')) {
-      directAssets.push(...await collectRocomAssetPaths())
+      directAssets.push(...await collectModeAssetPaths(baseURL, 'rock-kingdom'))
       browserRoutes.push(...await collectRocomRoutes(baseURL))
+    }
+    if (includesScope('kings-world')) {
+      directAssets.push(...await collectModeAssetPaths(baseURL, 'kings-world'))
+      browserRoutes.push(...await collectKingsWorldRoutes(baseURL))
     }
 
     if (!skipDirectAssets && directAssets.length > 0) {
-      console.log(`warming ${directAssets.length} direct asset requests`)
-      await runPool(directAssets, 8, (assetPath) => warmAsset(baseURL, assetPath))
+      const uniqueAssets = [...new Set(directAssets)]
+      console.log(`warming ${uniqueAssets.length} direct asset requests`)
+      await runPool(uniqueAssets, 8, (assetPath) => warmAsset(baseURL, assetPath))
     }
 
     if (browserRoutes.length > 0) {

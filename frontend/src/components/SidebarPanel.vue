@@ -35,7 +35,10 @@ const activeEventLabel = computed(() => {
   return (props.view.randomEvents ?? []).find((item) => item.slug === props.view.currentEvent)?.name ?? '暂无特殊事件'
 })
 
-const isRocomMode = computed(() => props.view?.currentMode?.slug === 'rock-kingdom')
+const isAtlasMode = computed(() => {
+  const modeSlug = props.view?.currentMode?.slug
+  return props.view?.currentMap?.tileSource?.projection === 'geo' || modeSlug === 'rock-kingdom' || modeSlug === 'kings-world'
+})
 const hasCompactControls = computed(
   () =>
     (props.view?.maps?.length ?? 0) > 1 ||
@@ -55,7 +58,7 @@ function applyGroupLayout(view) {
 
   const next = {}
   for (const [index, group] of (view.layerGroups ?? []).entries()) {
-    next[group.slug] = isRocomMode.value ? false : index > 8
+    next[group.slug] = isAtlasMode.value ? false : index > 8
   }
   collapsedGroups.value = next
 }
@@ -95,8 +98,8 @@ watch(
 </script>
 
 <template>
-  <aside class="sidebar" :class="{ 'sidebar--rocom': isRocomMode }">
-    <template v-if="isRocomMode">
+  <aside class="sidebar" :class="{ 'sidebar--rocom': isAtlasMode }">
+    <template v-if="isAtlasMode">
       <section class="sidebar-section sidebar-section--tight sidebar-section--rocom-top" v-if="(view?.modes?.length ?? 0) > 1">
         <div class="mode-strip">
           <button
@@ -113,8 +116,8 @@ watch(
 
       <div class="rocom-hero">
         <p class="rocom-hero__meta">DK Collection Atlas</p>
-        <h1>洛克王国点位图</h1>
-        <p class="rocom-hero__subtitle">独立布局 · {{ view?.currentMap.name ?? '世界地图' }}</p>
+        <h1>{{ view?.currentMode?.name ?? '互动地图' }}</h1>
+        <p class="rocom-hero__subtitle">{{ view?.currentMode?.subtitle ?? '世界互动地图' }} · {{ view?.currentMap.name ?? '世界地图' }}</p>
         <div class="rocom-hero__stats">
           <span class="rocom-stat">{{ view?.currentMap.name ?? '世界地图' }}</span>
           <span class="rocom-stat">{{ view?.stats.totalPoints ?? 0 }} 个点位</span>

@@ -24,6 +24,7 @@ type seedMap struct {
 	Caption         string
 	Description     string
 	Theme           string
+	TileSource      json.RawMessage
 	DefaultVariant  string
 	DefaultFloor    string
 	Sort            int
@@ -157,11 +158,11 @@ func SeedIfEmpty(db *sql.DB) error {
 		modeID := modeIDs[gameMap.ModeSlug]
 		res, execErr := tx.Exec(`
 			INSERT INTO maps (
-				mode_id, slug, name, caption, description, theme,
+				mode_id, slug, name, caption, description, theme, tile_source_json,
 				default_variant_slug, default_floor_slug, sort_order
-			) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 			modeID, gameMap.Slug, gameMap.Name, gameMap.Caption, gameMap.Description, gameMap.Theme,
-			gameMap.DefaultVariant, gameMap.DefaultFloor, gameMap.Sort,
+			tileSourceJSONString(gameMap.TileSource), gameMap.DefaultVariant, gameMap.DefaultFloor, gameMap.Sort,
 		)
 		if execErr != nil {
 			return execErr
@@ -697,6 +698,13 @@ func buildPoints(generators []seedPointGenerator, regionLookup map[string]seedRe
 		}
 	}
 	return points
+}
+
+func tileSourceJSONString(raw json.RawMessage) string {
+	if len(raw) == 0 {
+		return ""
+	}
+	return strings.TrimSpace(string(raw))
 }
 
 func buildDetail(name, region, summary string) string {

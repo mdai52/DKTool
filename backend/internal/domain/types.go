@@ -1,5 +1,7 @@
 package domain
 
+import "encoding/json"
+
 type ModeSummary struct {
 	Slug        string `json:"slug"`
 	Name        string `json:"name"`
@@ -9,13 +11,14 @@ type ModeSummary struct {
 }
 
 type MapSummary struct {
-	Slug           string `json:"slug"`
-	Name           string `json:"name"`
-	Caption        string `json:"caption"`
-	Description    string `json:"description"`
-	Theme          string `json:"theme"`
-	DefaultVariant string `json:"defaultVariant"`
-	DefaultFloor   string `json:"defaultFloor"`
+	Slug           string          `json:"slug"`
+	Name           string          `json:"name"`
+	Caption        string          `json:"caption"`
+	Description    string          `json:"description"`
+	Theme          string          `json:"theme"`
+	TileSource     json.RawMessage `json:"tileSource,omitempty"`
+	DefaultVariant string          `json:"defaultVariant"`
+	DefaultFloor   string          `json:"defaultFloor"`
 }
 
 type Variant struct {

@@ -418,6 +418,27 @@ function withTileDefaults(layer, floor = false) {
   }
 }
 
+function normalizeExternalTileSource(source) {
+  if (!source || typeof source !== 'object') return null
+
+  const normalized = { ...source }
+  if (!normalized.urlTemplate && normalized.keyPrefix) {
+    if (String(normalized.keyPrefix).startsWith('tile/rocom/')) {
+      normalized.urlTemplate = `${localAssetBaseUrl}/${normalized.keyPrefix}/{z}/{y}_{x}.png`
+      normalized.tileSize ??= 256
+      normalized.noWrap ??= true
+    }
+  }
+  if (!Number.isFinite(normalized.initLat) && normalized.initCenter?.lat != null) {
+    normalized.initLat = normalized.initCenter.lat
+  }
+  if (!Number.isFinite(normalized.initLng) && normalized.initCenter?.lng != null) {
+    normalized.initLng = normalized.initCenter.lng
+  }
+
+  return normalized.urlTemplate ? normalized : null
+}
+
 const rockKingdomRemoteMaps = {
   shijie: {
     projection: 'geo',
@@ -705,6 +726,11 @@ const warfareRemoteMaps = {
 
 export function resolveRemoteTileSource(view) {
   if (!view?.currentMap) return null
+
+  const externalTileSource = normalizeExternalTileSource(view.currentMap.tileSource)
+  if (externalTileSource) {
+    return externalTileSource
+  }
 
   if (view.currentMode?.slug === 'rock-kingdom') {
     return rockKingdomRemoteMaps[view.currentMap.slug] ?? null

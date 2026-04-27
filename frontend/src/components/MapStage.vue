@@ -40,6 +40,10 @@ let resizeObserver
 let isAdjustingView = false
 let warmSweepToken = 0
 let lastWarmSignature = ''
+let viewportWarmTimer = 0
+let lastViewportWarmSignature = ''
+let attachedProjectionMode = ''
+const warmedTileURLs = new Set()
 
 const visiblePointCount = computed(() => renderedPointCount.value)
 const projectionMode = computed(() => resolveRemoteTileSource(props.view)?.projection ?? 'simple')
@@ -61,6 +65,10 @@ function activeBounds() {
 
 function currentCRS() {
   return projectionMode.value === 'geo' ? L.CRS.EPSG3857 : L.CRS.Simple
+}
+
+function mapReady() {
+  return Boolean(map?._loaded)
 }
 
 function projectPoint(x, y) {
@@ -122,7 +130,7 @@ function shouldCullPoints() {
 }
 
 function declutterGridSize() {
-  if (!map || currentBaseSource?.projection !== 'geo') return 0
+  if (!mapReady() || currentBaseSource?.projection !== 'geo') return 0
 
   const zoom = map.getZoom()
   if (zoom >= 13) return 0
@@ -131,7 +139,7 @@ function declutterGridSize() {
 }
 
 function pointBoundsWithBuffer() {
-  if (!map) return null
+  if (!mapReady()) return null
   const bounds = map.getBounds()
   if (!bounds || !shouldCullPoints()) return null
   return bounds.pad(currentBaseSource?.projection === 'geo' ? 0.08 : 0.12)
@@ -164,6 +172,9 @@ function refreshEventRing() {
 }
 
 function clearBaseLayer() {
+  if (baseLayer?.off) {
+    baseLayer.off('load', queueViewportTileWarm)
+  }
   if (baseLayer && map?.hasLayer(baseLayer)) {
     map.removeLayer(baseLayer)
   }
@@ -195,6 +206,28 @@ function buildGeoBounds(source) {
   )
 }
 
+function constrainViewportToActiveBounds() {
+  if (!mapReady() || !currentBaseSource || isAdjustingView) return
+
+  const bounds = activeBounds()
+  const viewBounds = map.getBounds()
+  if (bounds.contains(viewBounds)) return
+
+  isAdjustingView = true
+
+  if (currentBaseSource.fitMode === 'bounds') {
+    map.fitBounds(bounds, { padding: [24, 24], animate: false })
+    isAdjustingView = false
+    return
+  }
+
+  if (currentBaseSource.projection === 'geo') {
+    map.panInsideBounds(bounds, { animate: false })
+  }
+
+  isAdjustingView = false
+}
+
 function applyFallbackOverlay() {
   clearBaseLayer()
   currentBaseSource = null
@@ -214,11 +247,12 @@ function applyRemoteTiles(source) {
       minZoom: source.minZoom,
       maxZoom: source.maxZoom,
       maxNativeZoom: source.maxNativeZoom,
-      detectRetina: true,
+      detectRetina: false,
       noWrap: source.noWrap ?? true,
       bounds: activeBounds(),
       tileSize: source.tileSize ?? 256
     }).addTo(map)
+    baseLayer.on('load', queueViewportTileWarm)
     return
   }
 
@@ -285,7 +319,7 @@ function refreshPoints() {
 }
 
 function syncViewportState(refreshVisiblePoints = true) {
-  if (!map) return
+  if (!mapReady()) return
 
   currentZoom.value = Number(map.getZoom().toFixed(2))
   if (refreshVisiblePoints) {
@@ -295,6 +329,178 @@ function syncViewportState(refreshVisiblePoints = true) {
 
 function wait(ms) {
   return new Promise((resolve) => window.setTimeout(resolve, ms))
+}
+
+function clamp(value, min, max) {
+  return Math.min(max, Math.max(min, value))
+}
+
+function localGeoTileWarmEnabled() {
+  return (
+    currentBaseSource?.projection === 'geo' &&
+    typeof currentBaseSource?.urlTemplate === 'string' &&
+    currentBaseSource.urlTemplate.startsWith('/api/assets/')
+  )
+}
+
+function clampGeoLat(lat) {
+  return clamp(lat, -85.05112878, 85.05112878)
+}
+
+function latLngToTile(lat, lng, zoom) {
+  const normalizedLat = clampGeoLat(lat)
+  const n = 2 ** zoom
+  const x = clamp(Math.floor(((lng + 180) / 360) * n), 0, n - 1)
+  const latRad = (normalizedLat * Math.PI) / 180
+  const y = clamp(
+    Math.floor(((1 - Math.log(Math.tan(latRad) + 1 / Math.cos(latRad)) / Math.PI) / 2) * n),
+    0,
+    n - 1
+  )
+
+  return { x, y }
+}
+
+function geoTileRange(bounds, zoom, padTiles = 0) {
+  const northWest = latLngToTile(bounds.getNorth(), bounds.getWest(), zoom)
+  const southEast = latLngToTile(bounds.getSouth(), bounds.getEast(), zoom)
+  const limit = (2 ** zoom) - 1
+
+  return {
+    minX: clamp(Math.min(northWest.x, southEast.x) - padTiles, 0, limit),
+    maxX: clamp(Math.max(northWest.x, southEast.x) + padTiles, 0, limit),
+    minY: clamp(Math.min(northWest.y, southEast.y) - padTiles, 0, limit),
+    maxY: clamp(Math.max(northWest.y, southEast.y) + padTiles, 0, limit)
+  }
+}
+
+function intersectTileRanges(left, right) {
+  const range = {
+    minX: Math.max(left.minX, right.minX),
+    maxX: Math.min(left.maxX, right.maxX),
+    minY: Math.max(left.minY, right.minY),
+    maxY: Math.min(left.maxY, right.maxY)
+  }
+
+  if (range.minX > range.maxX || range.minY > range.maxY) {
+    return null
+  }
+  return range
+}
+
+function tileURLAt(source, zoom, x, y) {
+  return source.urlTemplate
+    .replaceAll('{z}', String(zoom))
+    .replaceAll('{x}', String(x))
+    .replaceAll('{y}', String(y))
+}
+
+function visibleTileCoords() {
+  if (!baseLayer?._tiles) return []
+
+  const coords = Object.values(baseLayer._tiles)
+    .map((tile) => tile?.coords)
+    .filter(Boolean)
+
+  if (!coords.length) return []
+
+  const activeZoom = Math.max(...coords.map((item) => item.z))
+  return coords.filter((item) => item.z === activeZoom)
+}
+
+function preloadTileURL(url) {
+  warmedTileURLs.add(url)
+
+  return new Promise((resolve) => {
+    const image = new Image()
+    image.decoding = 'async'
+    image.onload = () => resolve()
+    image.onerror = () => resolve()
+    image.src = url
+  })
+}
+
+async function warmTileURLs(urls) {
+  const queue = urls.filter((url) => url && !warmedTileURLs.has(url))
+  if (!queue.length) return
+
+  let index = 0
+  const concurrency = Math.min(6, queue.length)
+
+  async function worker() {
+    while (index < queue.length) {
+      const nextIndex = index
+      index += 1
+      await preloadTileURL(queue[nextIndex])
+    }
+  }
+
+  await Promise.all(Array.from({ length: concurrency }, () => worker()))
+}
+
+function queueViewportTileWarm() {
+  if (!mapReady() || !localGeoTileWarmEnabled()) return
+
+  const signature = [
+    props.view?.currentMode?.slug,
+    props.view?.currentMap?.slug,
+    props.view?.currentVariant,
+    props.view?.currentFloor,
+    currentBaseSource?.urlTemplate
+  ].join('|')
+
+  if (signature !== lastViewportWarmSignature) {
+    lastViewportWarmSignature = signature
+    warmedTileURLs.clear()
+  }
+
+  window.clearTimeout(viewportWarmTimer)
+  viewportWarmTimer = window.setTimeout(() => {
+    if (!mapReady() || !localGeoTileWarmEnabled()) return
+
+    const source = currentBaseSource
+    const tileCoords = visibleTileCoords()
+    if (!tileCoords.length) return
+
+    const urls = []
+    const seen = new Set()
+
+    const zoomLevel = tileCoords[0].z
+    const xs = tileCoords.map((item) => item.x)
+    const ys = tileCoords.map((item) => item.y)
+    const minX = Math.min(...xs) - 1
+    const maxX = Math.max(...xs) + 1
+    const minY = Math.min(...ys) - 1
+    const maxY = Math.max(...ys) + 1
+
+    for (let x = minX; x <= maxX; x += 1) {
+      const topURL = tileURLAt(source, zoomLevel, x, minY)
+      const bottomURL = tileURLAt(source, zoomLevel, x, maxY)
+      if (!seen.has(topURL)) {
+        seen.add(topURL)
+        urls.push(topURL)
+      }
+      if (!seen.has(bottomURL)) {
+        seen.add(bottomURL)
+        urls.push(bottomURL)
+      }
+    }
+
+    for (let y = minY + 1; y < maxY; y += 1) {
+      const leftURL = tileURLAt(source, zoomLevel, minX, y)
+      const rightURL = tileURLAt(source, zoomLevel, maxX, y)
+      if (!seen.has(leftURL)) {
+        seen.add(leftURL)
+        urls.push(leftURL)
+      }
+      if (!seen.has(rightURL)) {
+        seen.add(rightURL)
+        urls.push(rightURL)
+      }
+    }
+
+    warmTileURLs(urls)
+  }, 90)
 }
 
 function warmTilesEnabled() {
@@ -367,6 +573,8 @@ function axisCenters(min, max, visibleSpan) {
 }
 
 function coverageCentersForZoom() {
+  if (!mapReady()) return []
+
   const bounds = activeBounds()
   const viewBounds = map.getBounds()
   const latSpan = Math.abs(viewBounds.getNorth() - viewBounds.getSouth())
@@ -384,7 +592,7 @@ function coverageCentersForZoom() {
 }
 
 async function runWarmCoverageSweep() {
-  if (!map || !props.view || !currentBaseSource || !warmTilesEnabled()) return
+  if (!mapReady() || !props.view || !currentBaseSource || !warmTilesEnabled()) return
 
   const token = ++warmSweepToken
   const settleMs = warmTileSettleMs()
@@ -392,7 +600,7 @@ async function runWarmCoverageSweep() {
   if (!zooms.length) return
 
   for (const zoom of zooms) {
-    if (token !== warmSweepToken || !map) return
+    if (token !== warmSweepToken || !mapReady()) return
 
     if (currentBaseSource.projection === 'geo') {
       map.setView([currentBaseSource.initLat, currentBaseSource.initLng], zoom, { animate: false })
@@ -403,7 +611,7 @@ async function runWarmCoverageSweep() {
 
     const centers = coverageCentersForZoom()
     for (const center of centers) {
-      if (token !== warmSweepToken || !map) return
+      if (token !== warmSweepToken || !mapReady()) return
       map.setView(center, zoom, { animate: false })
       await wait(settleMs)
     }
@@ -461,7 +669,7 @@ function resetView() {
 }
 
 function syncAdaptiveMinZoom() {
-  if (!map || !currentBaseSource || currentBaseSource.fitMode !== 'bounds') return
+  if (!mapReady() || !currentBaseSource || currentBaseSource.fitMode !== 'bounds') return
 
   const adaptiveMinZoom = Math.max(
     currentBaseSource.minZoom ?? map.getMinZoom(),
@@ -473,27 +681,14 @@ function syncAdaptiveMinZoom() {
 }
 
 function refreshLayout() {
-  if (!map || isAdjustingView) return
+  if (!mapReady() || isAdjustingView) return
 
   map.invalidateSize(false)
 
   if (!currentBaseSource) return
 
   syncAdaptiveMinZoom()
-
-  if (currentBaseSource.fitMode === 'bounds') {
-    const viewBounds = map.getBounds()
-    if (!activeBounds().contains(viewBounds)) {
-      isAdjustingView = true
-      map.fitBounds(activeBounds(), { padding: [24, 24], animate: false })
-      isAdjustingView = false
-      return
-    }
-  }
-
-  isAdjustingView = true
-  map.panInsideBounds(activeBounds(), { animate: false })
-  isAdjustingView = false
+  constrainViewportToActiveBounds()
 }
 
 function zoomIn() {
@@ -505,7 +700,7 @@ function zoomOut() {
 }
 
 function focusSelectedRegion(name) {
-  if (!map || !name || !props.view) return
+  if (!mapReady() || !name || !props.view) return
   const region = (props.view.regions ?? []).find((item) => item.name === name)
   if (!region) return
   map.flyTo(regionLatLng(region), Math.max(map.getZoom(), currentBaseSource?.projection === 'geo' ? 10.5 : 0.25), {
@@ -514,7 +709,7 @@ function focusSelectedRegion(name) {
 }
 
 function focusSelectedPoint() {
-  if (!map || !props.selectedPointId || !props.view) return
+  if (!mapReady() || !props.selectedPointId || !props.view) return
   const point = (props.view.points ?? []).find((item) => item.id === props.selectedPointId)
   if (!point) return
   map.panTo(pointLatLng(point), { animate: true, duration: 0.45 })
@@ -522,6 +717,7 @@ function focusSelectedPoint() {
 
 function attachMap() {
   const geoMode = projectionMode.value === 'geo'
+  attachedProjectionMode = projectionMode.value
   map = L.map(container.value, {
     crs: currentCRS(),
     attributionControl: false,
@@ -534,23 +730,27 @@ function attachMap() {
     maxBoundsViscosity: 1
   })
 
+  map.setView([0, 0], geoMode ? 10 : 0, { animate: false })
+  syncViewportState(false)
+
   pointLayer = L.layerGroup().addTo(map)
   regionLayer = L.layerGroup().addTo(map)
   eventLayer = L.layerGroup().addTo(map)
 
   map.on('zoomend', () => {
     currentZoom.value = Number(map.getZoom().toFixed(2))
+    constrainViewportToActiveBounds()
     if (shouldCullPoints()) {
       refreshPoints()
     }
+    queueViewportTileWarm()
   })
   map.on('moveend', () => {
-    if (currentBaseSource?.fitMode === 'bounds') {
-      refreshLayout()
-    }
+    constrainViewportToActiveBounds()
     if (shouldCullPoints()) {
       refreshPoints()
     }
+    queueViewportTileWarm()
   })
   map.on('click', () => emit('clear-point'))
 }
@@ -566,6 +766,7 @@ async function rebuildMap() {
   eventLayer = null
   currentBounds = null
   currentBaseSource = null
+  attachedProjectionMode = ''
   renderedPointCount.value = 0
 
   await nextTick()
@@ -573,23 +774,26 @@ async function rebuildMap() {
   map.invalidateSize(false)
   if (props.view) {
     refreshBaseLayer()
-    refreshRegions()
     resetView()
+    refreshRegions()
     refreshPoints()
     queueWarmCoverageSweep()
+    queueViewportTileWarm()
   }
 }
 
 async function syncMapForView() {
   if (!map || !props.view) return
+  if (attachedProjectionMode && attachedProjectionMode !== projectionMode.value) return
 
   await nextTick()
   map.invalidateSize(false)
   refreshBaseLayer()
-  refreshRegions()
   resetView()
+  refreshRegions()
   refreshPoints()
   queueWarmCoverageSweep()
+  queueViewportTileWarm()
 }
 
 onMounted(async () => {
@@ -599,10 +803,11 @@ onMounted(async () => {
   map.invalidateSize(false)
   if (props.view) {
     refreshBaseLayer()
-    refreshRegions()
     resetView()
+    refreshRegions()
     refreshPoints()
     queueWarmCoverageSweep()
+    queueViewportTileWarm()
   }
 
   if (typeof ResizeObserver !== 'undefined' && container.value) {
@@ -614,7 +819,12 @@ onMounted(async () => {
 })
 
 watch(
-  () => [props.view?.currentMode?.slug, props.view?.currentMap?.slug, props.view?.currentFloor],
+  () => [
+    props.view?.currentMode?.slug,
+    props.view?.currentMap?.slug,
+    props.view?.currentVariant,
+    props.view?.currentFloor
+  ],
   () => {
     if (!props.view) return
     syncMapForView()
@@ -676,6 +886,7 @@ watch(
 
 onBeforeUnmount(() => {
   warmSweepToken += 1
+  window.clearTimeout(viewportWarmTimer)
   resizeObserver?.disconnect()
   map?.remove()
   renderedPointCount.value = 0

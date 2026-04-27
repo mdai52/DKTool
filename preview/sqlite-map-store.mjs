@@ -85,7 +85,7 @@ function runSQLite(sql, { json = false } = {}) {
       }
     })
 
-    child.stdin.end(sql)
+    child.stdin.end(`.timeout 5000\n${sql}`)
   })
 }
 
@@ -127,6 +127,8 @@ function buildSearchText(point) {
 
 function buildSchemaSQL() {
   return `
+    PRAGMA journal_mode = WAL;
+    PRAGMA synchronous = NORMAL;
     CREATE TABLE IF NOT EXISTS modes (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       slug TEXT NOT NULL UNIQUE,
@@ -144,6 +146,7 @@ function buildSchemaSQL() {
       caption TEXT NOT NULL,
       description TEXT NOT NULL,
       theme TEXT NOT NULL,
+      tile_source_json TEXT NOT NULL DEFAULT '',
       default_variant_slug TEXT NOT NULL,
       default_floor_slug TEXT NOT NULL,
       sort_order INTEGER NOT NULL,
@@ -259,7 +262,7 @@ function buildSeedSQL() {
   for (const { map, mapIndex } of flattenMapEntries()) {
     statements.push(`
       INSERT INTO maps (
-        mode_id, slug, name, caption, description, theme, default_variant_slug, default_floor_slug, sort_order
+        mode_id, slug, name, caption, description, theme, tile_source_json, default_variant_slug, default_floor_slug, sort_order
       ) VALUES (
         (SELECT id FROM modes WHERE slug = ${sqlText(map.modeSlug)}),
         ${sqlText(map.slug)},
@@ -267,6 +270,7 @@ function buildSeedSQL() {
         ${sqlText(map.caption)},
         ${sqlText(map.description)},
         ${sqlText(map.theme)},
+        ${sqlText(map.tileSource ? JSON.stringify(map.tileSource) : '')},
         ${sqlText(map.defaultVariant)},
         ${sqlText(map.defaultFloor)},
         ${map.sort ?? mapIndex}
@@ -395,9 +399,8 @@ async function ensureSeeded() {
   if (!initializePromise) {
     initializePromise = (async () => {
       await runSQLite(buildSchemaSQL())
-      const rows = await runSQLite(`SELECT COUNT(*) AS count FROM modes;`, { json: true })
-      const count = Number(rows[0]?.count || 0)
-      if (count === 0) {
+      await ensureMapTileSourceColumn()
+      if (await needsReseed()) {
         await runSQLite(buildSeedSQL())
       }
     })()
@@ -406,11 +409,52 @@ async function ensureSeeded() {
   return initializePromise
 }
 
+async function needsReseed() {
+  const expectedModeSlugs = sourceModes.map((mode) => mode.slug).sort()
+  const expectedMaps = flattenMapEntries().map(({ map }) => map)
+  const expectedMapSlugs = expectedMaps.map((map) => map.slug).sort()
+
+  const [modeRows, mapRows] = await Promise.all([
+    runSQLite(`SELECT slug FROM modes ORDER BY slug;`, { json: true }),
+    runSQLite(`SELECT slug, tile_source_json AS tileSource FROM maps ORDER BY slug;`, { json: true })
+  ])
+
+  const actualModeSlugs = modeRows.map((row) => row.slug).sort()
+  const actualMapSlugs = mapRows.map((row) => row.slug).sort()
+
+  if (actualModeSlugs.length !== expectedModeSlugs.length || actualModeSlugs.join('|') !== expectedModeSlugs.join('|')) {
+    return true
+  }
+
+  if (actualMapSlugs.length !== expectedMapSlugs.length || actualMapSlugs.join('|') !== expectedMapSlugs.join('|')) {
+    return true
+  }
+
+  const tileSourceLookup = new Map(mapRows.map((row) => [row.slug, String(row.tileSource || '').trim()]))
+  for (const map of expectedMaps) {
+    const expectedTileSource = map.tileSource ? JSON.stringify(map.tileSource) : ''
+    const actualTileSource = tileSourceLookup.get(map.slug) ?? ''
+    if (expectedTileSource !== actualTileSource) {
+      return true
+    }
+  }
+
+  return false
+}
+
+async function ensureMapTileSourceColumn() {
+  const columns = await runSQLite(`PRAGMA table_info(maps);`, { json: true })
+  if (columns.some((column) => column.name === 'tile_source_json')) {
+    return
+  }
+  await runSQLite(`ALTER TABLE maps ADD COLUMN tile_source_json TEXT NOT NULL DEFAULT '';`)
+}
+
 async function loadDatasetFromDB() {
   const [modeRows, mapRows, variantRows, floorRows, regionRows, eventRows, layerRows, pointRows] = await Promise.all([
     runSQLite(`SELECT slug, name, subtitle, description, accent FROM modes ORDER BY sort_order;`, { json: true }),
     runSQLite(`
-      SELECT modes.slug AS modeSlug, maps.slug, maps.name, maps.caption, maps.description, maps.theme, maps.default_variant_slug AS defaultVariant, maps.default_floor_slug AS defaultFloor
+      SELECT modes.slug AS modeSlug, maps.slug, maps.name, maps.caption, maps.description, maps.theme, maps.tile_source_json AS tileSource, maps.default_variant_slug AS defaultVariant, maps.default_floor_slug AS defaultFloor
       FROM maps
       JOIN modes ON maps.mode_id = modes.id
       ORDER BY modes.sort_order, maps.sort_order;
@@ -494,6 +538,7 @@ async function loadDatasetFromDB() {
       caption: mapRow.caption,
       description: mapRow.description,
       theme: mapRow.theme,
+      tileSource: mapRow.tileSource ? JSON.parse(mapRow.tileSource) : null,
       defaultVariant: mapRow.defaultVariant,
       defaultFloor: mapRow.defaultFloor,
       variants: [],
@@ -633,6 +678,7 @@ function summarizeMaps(list) {
     caption: map.caption,
     description: map.description,
     theme: map.theme,
+    tileSource: map.tileSource,
     defaultVariant: map.defaultVariant,
     defaultFloor: map.defaultFloor
   }))

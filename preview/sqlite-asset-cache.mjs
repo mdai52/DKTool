@@ -90,13 +90,15 @@ function runSQLite(sql, { json = false } = {}) {
       }
     })
 
-    child.stdin.end(sql)
+    child.stdin.end(`.timeout 5000\n${sql}`)
   })
 }
 
 async function ensureAssetsTable() {
   if (!ensurePromise) {
     ensurePromise = runSQLite(`
+      PRAGMA journal_mode = WAL;
+      PRAGMA synchronous = NORMAL;
       CREATE TABLE IF NOT EXISTS assets (
         asset_key TEXT PRIMARY KEY,
         source_url TEXT NOT NULL,

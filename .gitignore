@@ -9,6 +9,7 @@ backend/*.db
 backend/*.db-shm
 backend/*.db-wal
 backend/server
+backend/dktool-server
 output/
 output/data/
 .playwright-mcp/

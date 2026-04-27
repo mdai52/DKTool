@@ -2,9 +2,11 @@ package api
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"io"
 	"log"
+	"math"
 	"net/http"
 	"os"
 	"path"
@@ -26,6 +28,36 @@ type Server struct {
 	httpClient            *http.Client
 	assetBootstrapEnabled bool
 	rocomWarmOnce         sync.Once
+	geoWarmOnce           sync.Map
+}
+
+const fullMapWarmTileBudget = 1800
+
+var transparentTileBody = decodeTransparentTileBody()
+
+type geoTileBounds struct {
+	South float64 `json:"south"`
+	West  float64 `json:"west"`
+	North float64 `json:"north"`
+	East  float64 `json:"east"`
+}
+
+type geoTileSource struct {
+	Projection    string        `json:"projection"`
+	URLTemplate   string        `json:"urlTemplate"`
+	MinZoom       int           `json:"minZoom"`
+	MaxNativeZoom int           `json:"maxNativeZoom"`
+	InitZoom      int           `json:"initZoom"`
+	InitLat       float64       `json:"initLat"`
+	InitLng       float64       `json:"initLng"`
+	Bounds        geoTileBounds `json:"bounds"`
+}
+
+type tileRange struct {
+	MinX int
+	MaxX int
+	MinY int
+	MaxY int
 }
 
 func New(store *data.Store, webRoot string) *Server {
@@ -132,6 +164,7 @@ func (s *Server) handleAsset(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	s.maybeWarmNeighborTiles(assetKey)
 	w.Header().Set("Content-Type", contentType)
 	w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
 	if r.Method == http.MethodHead {
@@ -235,6 +268,14 @@ func (s *Server) bootstrapAsset(ctx context.Context, assetKey string) (contentTy
 	defer response.Body.Close()
 
 	if response.StatusCode != http.StatusOK {
+		if response.StatusCode == http.StatusNotFound && strings.HasPrefix(assetKey, "tile/") {
+			contentType = "image/gif"
+			body = transparentTileBody
+			if saveErr := s.store.SaveAsset(assetKey, remoteAsset.SourceURL, contentType, body); saveErr != nil {
+				return "", nil, false, saveErr
+			}
+			return contentType, body, true, nil
+		}
 		return "", nil, false, nil
 	}
 
@@ -255,16 +296,15 @@ func (s *Server) bootstrapAsset(ctx context.Context, assetKey string) (contentTy
 }
 
 func (s *Server) maybeWarmAssets(response *domain.MapViewResponse) {
-	if !s.assetBootstrapEnabled {
-		return
-	}
-	if response.CurrentMode.Slug != "rock-kingdom" || response.CurrentMap.Slug != "shijie" {
+	if !s.assetBootstrapEnabled || response == nil {
 		return
 	}
 
-	s.rocomWarmOnce.Do(func() {
-		go s.prewarmRocomInitialAssets(response)
-	})
+	if response.CurrentMode.Slug == "rock-kingdom" && response.CurrentMap.Slug == "shijie" {
+		s.rocomWarmOnce.Do(func() {
+			go s.prewarmRocomInitialAssets(response)
+		})
+	}
 }
 
 func (s *Server) prewarmRocomInitialAssets(response *domain.MapViewResponse) {
@@ -336,6 +376,278 @@ func (s *Server) prewarmConcurrency() int {
 		}
 	}
 	return 8
+}
+
+func (s *Server) maybeWarmNeighborTiles(assetKey string) {
+	adjacentAssetKeys := collectAdjacentTileAssetKeys(assetKey)
+	if len(adjacentAssetKeys) == 0 {
+		return
+	}
+
+	onceValue, _ := s.geoWarmOnce.LoadOrStore("tile:"+assetKey, &sync.Once{})
+	once := onceValue.(*sync.Once)
+	once.Do(func() {
+		go s.prewarmAssetKeys(adjacentAssetKeys, 2)
+	})
+}
+
+func collectAdjacentTileAssetKeys(assetKey string) []string {
+	parts := strings.Split(assetKey, "/")
+	if len(parts) != 5 || parts[0] != "tile" {
+		return nil
+	}
+
+	zoom, err := strconv.Atoi(parts[3])
+	if err != nil {
+		return nil
+	}
+
+	extension := path.Ext(parts[4])
+	stem := strings.TrimSuffix(parts[4], extension)
+	coords := strings.Split(stem, "_")
+	if len(coords) != 2 {
+		return nil
+	}
+
+	first, err := strconv.Atoi(coords[0])
+	if err != nil {
+		return nil
+	}
+	second, err := strconv.Atoi(coords[1])
+	if err != nil {
+		return nil
+	}
+
+	deltas := [][2]int{
+		{1, 0},
+		{-1, 0},
+		{0, 1},
+		{0, -1},
+	}
+
+	adjacentAssetKeys := make([]string, 0, len(deltas))
+	for _, delta := range deltas {
+		fileName := ""
+		switch parts[1] {
+		case "rocom":
+			fileName = strconv.Itoa(first+delta[1]) + "_" + strconv.Itoa(second+delta[0]) + extension
+		case "hkw", "delta-force":
+			fileName = strconv.Itoa(first+delta[0]) + "_" + strconv.Itoa(second+delta[1]) + extension
+		default:
+			return nil
+		}
+		adjacentAssetKeys = append(adjacentAssetKeys, path.Join(parts[0], parts[1], parts[2], strconv.Itoa(zoom), fileName))
+	}
+
+	return adjacentAssetKeys
+}
+
+func collectGeoWarmPlan(response *domain.MapViewResponse) (signature string, initialAssetKeys, backgroundAssetKeys []string, ok bool) {
+	source, ok := parseGeoTileSource(response.CurrentMap.TileSource)
+	if !ok {
+		return "", nil, nil, false
+	}
+
+	initialAssetKeys = collectInitialGeoAssetKeys(source)
+	initialSet := make(map[string]struct{}, len(initialAssetKeys))
+	for _, assetKey := range initialAssetKeys {
+		initialSet[assetKey] = struct{}{}
+	}
+
+	for _, assetKey := range collectBackgroundGeoAssetKeys(source) {
+		if _, exists := initialSet[assetKey]; exists {
+			continue
+		}
+		backgroundAssetKeys = append(backgroundAssetKeys, assetKey)
+	}
+
+	signature = response.CurrentMode.Slug + ":" + response.CurrentMap.Slug + ":" + source.URLTemplate
+	return signature, initialAssetKeys, backgroundAssetKeys, true
+}
+
+func parseGeoTileSource(raw json.RawMessage) (geoTileSource, bool) {
+	if len(raw) == 0 {
+		return geoTileSource{}, false
+	}
+
+	var source geoTileSource
+	if err := json.Unmarshal(raw, &source); err != nil {
+		return geoTileSource{}, false
+	}
+	if source.Projection != "geo" || !strings.HasPrefix(source.URLTemplate, "/api/assets/") {
+		return geoTileSource{}, false
+	}
+	if source.MaxNativeZoom < source.MinZoom {
+		source.MaxNativeZoom = source.MinZoom
+	}
+	if source.InitZoom < source.MinZoom {
+		source.InitZoom = source.MinZoom
+	}
+	if source.InitZoom > source.MaxNativeZoom {
+		source.InitZoom = source.MaxNativeZoom
+	}
+	if math.Abs(source.InitLat) < 1e-9 && math.Abs(source.InitLng) < 1e-9 {
+		source.InitLat = (source.Bounds.North + source.Bounds.South) / 2
+		source.InitLng = (source.Bounds.West + source.Bounds.East) / 2
+	}
+
+	return source, true
+}
+
+func collectInitialGeoAssetKeys(source geoTileSource) []string {
+	zoom := clampInt(source.InitZoom, source.MinZoom, source.MaxNativeZoom)
+	initialAssetKeys := map[string]struct{}{}
+
+	boundsRange := tileRangeFromBounds(source.Bounds, zoom, 0)
+	if rangeAtZoom, ok := intersectTileRanges(boundsRange, tileRangeAroundCenter(source, zoom, 2)); ok {
+		addTileRangeAssetKeys(initialAssetKeys, source, zoom, rangeAtZoom)
+	}
+
+	if zoom > source.MinZoom {
+		lowerZoom := zoom - 1
+		if rangeAtZoom, ok := intersectTileRanges(tileRangeFromBounds(source.Bounds, lowerZoom, 0), tileRangeAroundCenter(source, lowerZoom, 1)); ok {
+			addTileRangeAssetKeys(initialAssetKeys, source, lowerZoom, rangeAtZoom)
+		}
+	}
+
+	return sortedAssetKeys(initialAssetKeys)
+}
+
+func collectBackgroundGeoAssetKeys(source geoTileSource) []string {
+	fullAssetKeys, totalTiles := collectFullGeoAssetKeys(source)
+	if totalTiles <= fullMapWarmTileBudget {
+		return fullAssetKeys
+	}
+
+	focusAssetKeys := map[string]struct{}{}
+	maxCoverageZoom := clampInt(source.InitZoom, source.MinZoom, source.MaxNativeZoom)
+	for zoom := source.MinZoom; zoom <= maxCoverageZoom; zoom++ {
+		addTileRangeAssetKeys(focusAssetKeys, source, zoom, tileRangeFromBounds(source.Bounds, zoom, 0))
+	}
+
+	if rangeAtZoom, ok := intersectTileRanges(
+		tileRangeFromBounds(source.Bounds, maxCoverageZoom, 0),
+		tileRangeAroundCenter(source, maxCoverageZoom, 3),
+	); ok {
+		addTileRangeAssetKeys(focusAssetKeys, source, maxCoverageZoom, rangeAtZoom)
+	}
+
+	return sortedAssetKeys(focusAssetKeys)
+}
+
+func collectFullGeoAssetKeys(source geoTileSource) ([]string, int) {
+	assetKeys := map[string]struct{}{}
+	totalTiles := 0
+
+	for zoom := source.MinZoom; zoom <= source.MaxNativeZoom; zoom++ {
+		totalTiles += addTileRangeAssetKeys(assetKeys, source, zoom, tileRangeFromBounds(source.Bounds, zoom, 0))
+	}
+
+	return sortedAssetKeys(assetKeys), totalTiles
+}
+
+func addTileRangeAssetKeys(assetKeys map[string]struct{}, source geoTileSource, zoom int, bounds tileRange) int {
+	count := 0
+	for x := bounds.MinX; x <= bounds.MaxX; x++ {
+		for y := bounds.MinY; y <= bounds.MaxY; y++ {
+			assetKey := strings.TrimPrefix(replaceTileTemplate(source.URLTemplate, zoom, x, y), "/api/assets/")
+			if _, exists := assetKeys[assetKey]; exists {
+				continue
+			}
+			assetKeys[assetKey] = struct{}{}
+			count++
+		}
+	}
+	return count
+}
+
+func tileRangeFromBounds(bounds geoTileBounds, zoom, padTiles int) tileRange {
+	northWestX, northWestY := latLngToTile(bounds.North, bounds.West, zoom)
+	southEastX, southEastY := latLngToTile(bounds.South, bounds.East, zoom)
+	limit := (1 << zoom) - 1
+
+	return tileRange{
+		MinX: clampInt(minInt(northWestX, southEastX)-padTiles, 0, limit),
+		MaxX: clampInt(maxInt(northWestX, southEastX)+padTiles, 0, limit),
+		MinY: clampInt(minInt(northWestY, southEastY)-padTiles, 0, limit),
+		MaxY: clampInt(maxInt(northWestY, southEastY)+padTiles, 0, limit),
+	}
+}
+
+func tileRangeAroundCenter(source geoTileSource, zoom, padTiles int) tileRange {
+	centerX, centerY := latLngToTile(source.InitLat, source.InitLng, zoom)
+	limit := (1 << zoom) - 1
+
+	return tileRange{
+		MinX: clampInt(centerX-padTiles, 0, limit),
+		MaxX: clampInt(centerX+padTiles, 0, limit),
+		MinY: clampInt(centerY-padTiles, 0, limit),
+		MaxY: clampInt(centerY+padTiles, 0, limit),
+	}
+}
+
+func intersectTileRanges(left, right tileRange) (tileRange, bool) {
+	result := tileRange{
+		MinX: maxInt(left.MinX, right.MinX),
+		MaxX: minInt(left.MaxX, right.MaxX),
+		MinY: maxInt(left.MinY, right.MinY),
+		MaxY: minInt(left.MaxY, right.MaxY),
+	}
+	if result.MinX > result.MaxX || result.MinY > result.MaxY {
+		return tileRange{}, false
+	}
+	return result, true
+}
+
+func latLngToTile(lat, lng float64, zoom int) (int, int) {
+	clampedLat := math.Max(-85.05112878, math.Min(85.05112878, lat))
+	n := math.Exp2(float64(zoom))
+	x := int(math.Floor(((lng + 180) / 360) * n))
+	latRad := clampedLat * math.Pi / 180
+	y := int(math.Floor((1 - math.Log(math.Tan(latRad)+1/math.Cos(latRad))/math.Pi) / 2 * n))
+	limit := int(n) - 1
+	return clampInt(x, 0, limit), clampInt(y, 0, limit)
+}
+
+func replaceTileTemplate(urlTemplate string, zoom, x, y int) string {
+	value := strings.ReplaceAll(urlTemplate, "{z}", strconv.Itoa(zoom))
+	value = strings.ReplaceAll(value, "{x}", strconv.Itoa(x))
+	return strings.ReplaceAll(value, "{y}", strconv.Itoa(y))
+}
+
+func sortedAssetKeys(assetKeys map[string]struct{}) []string {
+	list := make([]string, 0, len(assetKeys))
+	for assetKey := range assetKeys {
+		list = append(list, assetKey)
+	}
+	sort.Strings(list)
+	return list
+}
+
+func clampInt(value, minValue, maxValue int) int {
+	return minInt(maxInt(value, minValue), maxValue)
+}
+
+func minInt(left, right int) int {
+	if left < right {
+		return left
+	}
+	return right
+}
+
+func maxInt(left, right int) int {
+	if left > right {
+		return left
+	}
+	return right
+}
+
+func decodeTransparentTileBody() []byte {
+	body, err := base64.StdEncoding.DecodeString("R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==")
+	if err != nil {
+		panic(err)
+	}
+	return body
 }
 
 func collectRocomInitialAssetKeys(response *domain.MapViewResponse) []string {

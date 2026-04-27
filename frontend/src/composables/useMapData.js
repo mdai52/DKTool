@@ -1,5 +1,48 @@
 import { computed, onBeforeUnmount, reactive, ref, watch } from 'vue'
 
+const pointLabelOnlyPattern = /^(位置|触发方式|触发条件|获取方式|流程|提示|相关任务)[:：]\s*$/u
+const pointLabelPrefixPattern = /^(位置|触发方式|触发条件|获取方式|流程|提示|相关任务)[:：]\s*(?:\/\s*)?/u
+
+function cleanPointSummary(value) {
+  const text = String(value ?? '').trim()
+  if (!text) return ''
+
+  const cleaned = text.replace(pointLabelPrefixPattern, '').trim()
+  return pointLabelOnlyPattern.test(cleaned) ? '' : cleaned
+}
+
+function cleanPointDetail(value) {
+  const lines = String(value ?? '')
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean)
+
+  if (!lines.length) return ''
+  if (pointLabelOnlyPattern.test(lines[0])) lines.shift()
+
+  return lines.join('\n').replace(/^\/\s*/, '').trim()
+}
+
+function cleanPointCondition(value) {
+  const text = String(value ?? '').trim()
+  if (!text || pointLabelOnlyPattern.test(text)) return ''
+  return text
+}
+
+function normalizePoint(point) {
+  const summary = cleanPointSummary(point.summary)
+  const detail = cleanPointDetail(point.detail)
+  const condition = cleanPointCondition(point.condition)
+  const fallbackText = summary || detail || `${point.name} 点位`
+
+  return {
+    ...point,
+    summary: summary || fallbackText,
+    detail: detail || fallbackText,
+    condition
+  }
+}
+
 function parseInitialParams() {
   const params = new URLSearchParams(window.location.search)
   const layers = params.get('layers')?.split(',').filter(Boolean) ?? []
@@ -121,7 +164,7 @@ export function useMapData() {
           }))
         : []
       payload.selectedLayers = Array.isArray(payload.selectedLayers) ? payload.selectedLayers : []
-      payload.points = Array.isArray(payload.points) ? payload.points : []
+      payload.points = Array.isArray(payload.points) ? payload.points.map(normalizePoint) : []
       payload.regions = Array.isArray(payload.regions) ? payload.regions : []
       payload.randomEvents = Array.isArray(payload.randomEvents) ? payload.randomEvents : []
 
@@ -135,7 +178,7 @@ export function useMapData() {
       selection.layers = [...payload.selectedLayers]
 
       if (!payload.points.some((item) => item.id === selectedPointId.value)) {
-        selectedPointId.value = payload.currentMode.slug === 'rock-kingdom' ? null : (payload.points[0]?.id ?? null)
+        selectedPointId.value = payload.currentMap?.tileSource?.projection === 'geo' ? null : (payload.points[0]?.id ?? null)
       }
 
       if (!payload.regions.some((item) => item.name === focusedRegion.value)) {

@@ -14,13 +14,18 @@ const props = defineProps({
     type: Object,
     default: null
   },
-  modeSlug: {
-    type: String,
-    default: ''
+  atlasMode: {
+    type: Boolean,
+    default: false
+  },
+  mobile: {
+    type: Boolean,
+    default: false
   }
 })
+defineEmits(['close'])
 
-const isRocomMode = computed(() => props.modeSlug === 'rock-kingdom')
+const isRocomMode = computed(() => props.atlasMode)
 const pointImages = computed(() => props.point?.imageUrls ?? [])
 const activeImageIndex = ref(0)
 const activeImageUrl = computed(() => pointImages.value[activeImageIndex.value] ?? '')
@@ -53,6 +58,7 @@ function showNextImage() {
     <template v-if="point">
       <div class="inspector__header">
         <span class="inspector__tag" :style="{ '--tag-color': point.layerColor }">{{ point.layerName }}</span>
+        <button v-if="mobile" type="button" class="inspector__close" @click="$emit('close')">✕</button>
         <strong>{{ point.name }}</strong>
         <small>{{ point.regionName }}</small>
       </div>
@@ -109,16 +115,17 @@ function showNextImage() {
           </button>
         </div>
       </div>
-      <div class="inspector__condition">
+      <div v-if="point.condition" class="inspector__condition">
         <span>拾取条件</span>
         <strong>{{ point.condition }}</strong>
       </div>
-      <p class="inspector__summary">{{ point.summary }}</p>
+      <p v-if="point.summary && point.summary !== point.detail" class="inspector__summary">{{ point.summary }}</p>
     </template>
 
     <template v-else>
       <div class="inspector__header">
         <span class="inspector__tag" style="--tag-color:#13f2a0">视图概览</span>
+        <button v-if="mobile" type="button" class="inspector__close" @click="$emit('close')">✕</button>
         <strong>{{ view?.currentMap.name ?? 'DK 地图工具' }}</strong>
         <small>{{ view?.currentMode.description ?? '' }}</small>
       </div>
