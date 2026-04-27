@@ -49,7 +49,7 @@ function showNextImage() {
 </script>
 
 <template>
-  <aside class="inspector" :class="{ 'inspector--rocom': isRocomMode }">
+<aside class="inspector" :class="{ 'inspector--rocom': isRocomMode }">
     <template v-if="point">
       <div class="inspector__header">
         <span class="inspector__tag" :style="{ '--tag-color': point.layerColor }">{{ point.layerName }}</span>

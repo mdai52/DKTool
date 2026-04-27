@@ -1616,127 +1616,326 @@ button {
 }
 
 @media (max-width: 760px) {
+  /* ===== 三角洲风格：全屏沉浸式地图布局 ===== */
+  body {
+    overflow: hidden;
+    position: fixed;
+    width: 100%;
+    height: 100%;
+  }
+
   .theme-rocom.app-shell,
   .theme-rocom.app-shell.app-shell--wide {
     display: flex;
     flex-direction: column;
-    height: auto;
-    min-height: auto;
-    overflow: visible;
+    height: 100vh;
+    height: 100dvh;
+    min-height: 100vh;
+    min-height: 100dvh;
+    overflow: hidden;
+    position: relative;
   }
 
+  /* 侧边栏 → 左侧抽屉（默认隐藏） */
+  .theme-rocom .sidebar--rocom {
+    position: fixed;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    width: 85vw;
+    max-width: 340px;
+    z-index: 2000;
+    background:
+      radial-gradient(circle at top right, rgba(255,255,255,0.95), transparent 28%),
+      linear-gradient(180deg, rgba(247,253,255,0.98) 0%, rgba(228,246,255,0.97) 55%, rgba(215,237,246,0.96) 100%);
+    border-right: 1px solid rgba(82,158,178,0.2);
+    box-shadow: 8px 0 40px rgba(0,0,0,0.15);
+    transform: translateX(-100%);
+    transition: transform 0.35s cubic-bezier(0.32, 0.72, 0, 1);
+    padding: 16px 16px 24px;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    border-bottom: none;
+  }
+
+  /* 抽屉打开状态 */
+  .theme-rocom .sidebar--rocom.is-drawer-open {
+    transform: translateX(0);
+  }
+
+  /* 遮罩层 */
+  .mobile-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    z-index: 1999;
+    background: rgba(0,0,0,0.4);
+    backdrop-filter: blur(4px);
+  }
+
+  .mobile-overlay.is-visible {
+    display: block;
+  }
+
+  /* 工作区 = 全屏地图容器 */
   .theme-rocom .workspace--rocom {
     order: 1;
-    flex-shrink: 0;
+    flex: 1;
+    min-height: 0;
+    padding: 0;
+    position: relative;
+    overflow: hidden;
   }
 
-  .theme-rocom .sidebar--rocom {
-    order: 2;
-    border-right: 0;
-    border-bottom: 1px solid rgba(82, 158, 178, 0.18);
-    overflow: visible;
-  }
-
-  /* ===== 手机端：地图区域优先，最大化高度 ===== */
-  .workspace--rocom {
-    padding: 10px 10px 12px;
-  }
-
+  /* 地图全屏 */
   .theme-rocom .workspace--rocom .map-stage {
-    height: 58svh;
-    border-radius: 22px;
-    border: 1px solid rgba(102, 170, 187, 0.18);
-    box-shadow: 0 18px 32px rgba(18, 43, 84, 0.2);
+    height: 100% !important;
+    border-radius: 0;
+    border: none;
+    box-shadow: none;
   }
 
-  /* HUD 徽章更紧凑 */
+  /* ===== 顶部信息条（极简浮动）===== */
+  .rocom-topbar-mobile {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: 800;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 12px;
+    padding-top: max(10px, env(safe-area-inset-top));
+    background: linear-gradient(180deg, rgba(0,20,40,0.7) 0%, transparent 100%);
+    pointer-events: none;
+  }
+
+  .rocom-topbar-mobile > * {
+    pointer-events: auto;
+  }
+
+  .rocom-topbar__left {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .rocom-hamburger {
+    display: grid;
+    place-items: center;
+    width: 38px;
+    height: 38px;
+    border-radius: 12px;
+    border: 1px solid rgba(255,255,255,0.15);
+    background: rgba(10,25,40,0.7);
+    backdrop-filter: blur(12px);
+    color: #fff;
+    font-size: 18px;
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+    transition: background 0.15s ease;
+  }
+
+  .rocom-hamburger:active {
+    background: rgba(19,242,160,0.25);
+  }
+
+  .rocom-topbar__title {
+    color: #fff;
+    font-size: 15px;
+    font-weight: 700;
+    text-shadow: 0 1px 6px rgba(0,0,0,0.5);
+    letter-spacing: 0.03em;
+  }
+
+  .rocom-topbar__title small {
+    display: block;
+    font-size: 11px;
+    font-weight: 400;
+    color: rgba(255,255,255,0.65);
+    margin-top: 1px;
+  }
+
+  .rocom-search-btn {
+    display: grid;
+    place-items: center;
+    width: 38px;
+    height: 38px;
+    border-radius: 12px;
+    border: 1px solid rgba(255,255,255,0.15);
+    background: rgba(10,25,40,0.7);
+    backdrop-filter: blur(12px);
+    color: #fff;
+    font-size: 17px;
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  /* HUD徽章 → 右下角紧凑信息组 */
   .workspace--rocom .map-stage__hud {
-    left: 8px;
-    right: 8px;
-    bottom: 8px;
-    gap: 6px;
+    position: absolute;
+    right: 10px;
+    bottom: 72px;  /* 留出底部工具栏空间 */
+    left: auto;
+    top: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    z-index: 750;
+    pointer-events: none;
   }
 
   .workspace--rocom .map-stage__badge {
-    padding: 6px 10px;
-    border-radius: 12px;
-    font-size: 11px;
+    padding: 5px 10px;
+    border-radius: 10px;
+    background: rgba(10,20,30,0.75);
+    border: 1px solid rgba(255,255,255,0.1);
+    backdrop-filter: blur(8px);
+    font-size: 10px;
+    text-align: right;
   }
 
-  /* ===== 手机端：工具栏改为底部浮动图标栏 ===== */
+  .workspace--rocom .map-stage__badge span {
+    color: rgba(255,255,255,0.5);
+    font-size: 9px;
+  }
+
+  .workspace--rocom .map-stage__badge strong {
+    color: #79cdbf;
+    font-size: 12px;
+    font-weight: 700;
+  }
+
+  /* ===== 工具栏：右下角圆形按钮组（游戏HUD风格）===== */
   .toolbar-rail--rocom {
-    position: fixed;
-    bottom: 0;
-    left: 0;
-    right: 0;
-    z-index: 999;
+    position: absolute;
+    right: 10px;
+    bottom: 14px;
+    bottom: calc(14px + env(safe-area-inset-bottom));
+    left: auto;
+    top: auto;
+    z-index: 850;
     display: flex;
-    flex-direction: row;
-    justify-content: center;
-    gap: 4px;
-    padding: 8px 12px calc(8px + env(safe-area-inset-bottom));
-    background: linear-gradient(180deg, rgba(247,252,255,0) 0%, rgba(247,252,255,0.92) 20%, rgba(241,249,255,0.96) 100%);
-    border-top: 1px solid rgba(102, 170, 187, 0.16);
-    backdrop-filter: blur(16px);
-    margin-top: 0;
-    overflow-x: visible;
+    flex-direction: column;
+    gap: 8px;
+    width: auto;
+    padding: 0;
+    background: none;
+    border: none;
+    backdrop-filter: none;
   }
 
   .toolbar-rail--rocom > * {
-    flex: 1 1 0;
-    max-width: 72px;
+    flex: none;
+    max-width: none;
   }
 
-  .theme-rocom .toolbar-button,
+  /* 隐藏事件卡片在手机端 */
   .theme-rocom .toolbar-rail__event {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    gap: 1px;
-    min-height: 48px;
-    padding: 6px 4px;
-    border-radius: 14px;
-    font-size: 10px;
-  }
-
-  .theme-rocom .toolbar-button__icon {
-    font-size: 20px;
-  }
-
-  .theme-rocom .toolbar-button__label {
-    font-size: 10px;
-    font-weight: 600;
-  }
-
-  .theme-rocom .toolbar-rail__event span {
     display: none;
   }
 
-  .theme-rocom .toolbar-rail__event strong {
-    font-size: 11px;
+  /* 圆形游戏风格按钮 */
+  .theme-rocom .toolbar-button,
+  .theme-rocom .toolbar-rail__event {
+    display: grid;
+    place-items: center;
+    width: 46px;
+    height: 46px;
+    min-height: 46px;
+    padding: 0;
+    border-radius: 50%;
+    border: 1px solid rgba(255,255,255,0.18);
+    background: rgba(10,20,35,0.75);
+    backdrop-filter: blur(12px);
+    box-shadow: 0 4px 14px rgba(0,0,0,0.25), inset 0 0 0 1px rgba(255,255,255,0.05);
+    color: #fff;
+    transition: transform 0.12s ease, background 0.12s ease;
+    -webkit-tap-highlight-color: transparent;
   }
 
-  /* ===== 手机端：侧边栏紧凑化 ===== */
+  .theme-rocom .toolbar-button:active {
+    transform: scale(0.9);
+    background: rgba(19,242,160,0.3);
+  }
+
+  .theme-rocom .toolbar-button__icon {
+    font-size: 22px;
+    line-height: 1;
+  }
+
+  .theme-rocom .toolbar-button__label,
+  .theme-rocom .toolbar-button__sub {
+    display: none;
+  }
+
+  /* ===== 详情面板：底部卡片（半屏）===== */
+  .theme-rocom .inspector--rocom {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 1900;
+    width: 100%;
+    min-width: 0;
+    max-height: 52vh;
+    border-radius: 20px 20px 0 0;
+    margin: 0;
+    padding: 14px 16px;
+    padding-bottom: calc(14px + env(safe-area-inset-bottom));
+    background: linear-gradient(180deg, rgba(247,252,255,0.97) 0%, rgba(240,248,255,0.98) 100%);
+    border: 1px solid rgba(102,170,187,0.15);
+    border-bottom: none;
+    box-shadow: 0 -8px 40px rgba(0,0,0,0.15);
+    transform: translateY(100%);
+    transition: transform 0.32s cubic-bezier(0.32, 0.72, 0, 1);
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .theme-rocom .inspector--rocom.is-visible {
+    transform: translateY(0);
+  }
+
+  /* 拖拽指示条 */
+  .theme-rocom .inspector--rocom::before {
+    content: '';
+    position: absolute;
+    top: 6px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 36px;
+    height: 4px;
+    border-radius: 999px;
+    background: rgba(120,150,170,0.3);
+  }
+
+  /* 侧边栏内部样式适配抽屉模式 */
+  .theme-rocom .sidebar {
+    padding: 16px 16px 24px;
+    gap: 14px;
+  }
+
   .mode-strip {
-    grid-template-columns: repeat(auto-fit, minmax(88px, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(90px, 1fr));
     gap: 8px;
   }
 
   .mode-tab {
     min-height: 38px;
     padding: 0 10px;
-    border-radius: 14px;
+    border-radius: 13px;
     font-size: 13px;
   }
 
   .theme-rocom .rocom-hero {
-    padding: 14px 14px 12px;
-    border-radius: 22px;
+    padding: 16px 16px 14px;
+    border-radius: 20px;
   }
 
   .theme-rocom .rocom-hero h1 {
-    font-size: clamp(1.8rem, 6vw, 2.6rem);
+    font-size: clamp(1.7rem, 6vw, 2.4rem);
   }
 
   .theme-rocom .rocom-hero__subtitle {
@@ -1755,21 +1954,21 @@ button {
   }
 
   .theme-rocom .rocom-hero__actions {
-    grid-template-columns: 1fr;
+    grid-template-columns: 1fr 1fr;
     gap: 8px;
     margin-top: 12px;
   }
 
   .rocom-action {
     min-height: 40px;
-    border-radius: 14px;
-    font-size: 14px;
+    border-radius: 13px;
+    font-size: 13px;
   }
 
-  /* 搜索框紧凑 */
+  /* 搜索框 */
   .theme-rocom .search-input--rocom {
-    grid-template-columns: 40px minmax(0, 1fr) 64px;
-    border-radius: 16px;
+    grid-template-columns: 38px minmax(0,1fr) 60px;
+    border-radius: 15px;
   }
 
   .search-input--rocom input {
@@ -1778,72 +1977,85 @@ button {
   }
 
   .search-input__submit {
-    font-size: 13px;
+    font-size: 12px;
   }
 
-  /* 控件网格单列 */
+  /* 控件单列 */
   .theme-rocom .rocom-compact-grid {
     grid-template-columns: 1fr;
     gap: 8px;
   }
 
   .control-field--rocom select {
-    min-height: 38px;
+    min-height: 40px;
     font-size: 14px;
     border-radius: 12px;
   }
 
-  /* 图层列表紧凑 */
+  /* 图层列表 */
+  .theme-rocom .layer-groups--rocom {
+    gap: 16px;
+    padding-bottom: 24px;
+    max-height: none;
+    overflow: visible;
+  }
+
+  .theme-rocom .layer-group__header--rocom {
+    padding: 0 0 8px;
+  }
+
+  .theme-rocom .layer-group__header--rocom strong {
+    font-size: 14px;
+  }
+
+  .theme-rocom .layer-grid--rocom {
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+  }
+
   .theme-rocom .layer-tile--rocom {
-    padding: 8px 10px;
+    padding: 10px 10px;
     border-radius: 14px;
   }
 
   .theme-rocom .layer-tile__icon--rocom {
-    width: 26px;
-    height: 26px;
+    width: 28px;
+    height: 28px;
   }
 
   .theme-rocom .layer-tile__icon--rocom img {
-    width: 18px;
-    height: 18px;
+    width: 20px;
+    height: 20px;
   }
 
   .theme-rocom .layer-tile__name--rocom {
     font-size: 13px;
   }
 
-  /* 检查面板全宽，底部留工具栏空间 */
-  .theme-rocom .inspector--rocom {
-    position: static;
-    width: auto;
-    min-width: 0;
-    max-height: none;
-    margin-top: 10px;
-    margin-bottom: 70px;
-    border-radius: 20px;
-    padding: 14px;
+  .section-title--rocom {
+    padding-bottom: 8px;
+  }
+
+  .section-title--rocom span {
+    font-size: 16px;
   }
 
   .theme-rocom .sidebar-section--rocom-list,
   .theme-rocom .layer-groups--rocom {
     overflow: visible;
     max-height: none;
-    padding-bottom: 18px;
-  }
-
-  .section-title--rocom {
-    padding-bottom: 8px;
   }
 }
 
 @media (max-width: 560px) {
-  .theme-rocom .sidebar {
-    padding: 10px 10px 14px;
+  .theme-rocom .sidebar--rocom {
+    width: 88vw;
+    max-width: none;
+    padding: 12px 14px 20px;
   }
 
   .theme-rocom .rocom-hero h1 {
-    font-size: clamp(1.6rem, 8vw, 2.2rem);
+    font-size: clamp(1.5rem, 8vw, 2rem);
   }
 
   .theme-rocom .rocom-hero__subtitle {
@@ -1853,39 +2065,32 @@ button {
 
   .theme-rocom .layer-tile--rocom {
     padding: 8px 8px;
+    border-radius: 12px;
   }
 
-  .workspace--rocom {
-    padding: 8px 8px 10px;
+  .rocom-topbar__title {
+    font-size: 13px;
   }
 
-  .theme-rocom .workspace--rocom .map-stage {
-    height: 55svh;
-    border-radius: 18px;
+  .rocom-hamburger,
+  .rocom-search-btn {
+    width: 34px;
+    height: 34px;
+    border-radius: 10px;
   }
 
-  .toolbar-rail--rocom {
-    gap: 2px;
-    padding: 6px 8px calc(6px + env(safe-area-inset-bottom));
-  }
-
-  .toolbar-rail--rocom > * {
-    max-width: 64px;
-  }
-
-  .theme-rocom .toolbar-button,
-  .theme-rocom .toolbar-rail__event {
-    min-height: 44px;
-    padding: 5px 3px;
+  .theme-rocom .toolbar-button {
+    width: 42px;
+    height: 42px;
+    min-height: 42px;
   }
 
   .theme-rocom .toolbar-button__icon {
-    font-size: 18px;
+    font-size: 20px;
   }
 
-  .theme-rocom .toolbar-button__label {
-    font-size: 9px;
-  }
-}
+  .workspace--rocom .map-stage__hud {
+    right: 6px;
+    bottom: 68px;
   }
 }

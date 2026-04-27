@@ -33,12 +33,30 @@ const {
   showToast
 } = useMapData()
 
+// 移动端抽屉状态
+const drawerOpen = ref(false)
+const inspectorVisible = ref(false)
+
 const currentVariantLabel = computed(() => {
   if (!view.value) return ''
   return (view.value.variants ?? []).find((item) => item.slug === view.value.currentVariant)?.label ?? view.value.currentVariant
 })
 
 const isRocomMode = computed(() => view.value?.currentMode?.slug === 'rock-kingdom')
+
+function toggleDrawer() {
+  drawerOpen.value = !drawerOpen.value
+}
+
+function closeDrawer() {
+  drawerOpen.value = false
+}
+
+// 监听选中点位，自动显示/隐藏面板
+import { watch } from 'vue'
+watch(selectedPointId, (id) => {
+  inspectorVisible.value = !!id
+})
 
 function updateSearch(value) {
   search.value = value
@@ -86,23 +104,46 @@ onMounted(() => {
       'theme-rocom': isRocomMode
     }"
   >
+    <!-- 移动端遮罩 -->
+    <div
+      v-if="isRocomMode"
+      class="mobile-overlay"
+      :class="{ 'is-visible': drawerOpen }"
+      @click="closeDrawer"
+    />
+
     <SidebarPanel
       :view="view"
       :search="search"
       :loading="loading"
-      @update-search="updateSearch"
-      @change-mode="setMode"
-      @change-map="setMap"
-      @change-variant="setVariant"
-      @change-floor="setFloor"
-      @change-event="setEvent"
-      @focus-region="focusRegion"
+      :class="{ 'is-drawer-open': drawerOpen }"
+      @update-search="(v) => { updateSearch(v); closeDrawer() }"
+      @change-mode="(m) => { setMode(m); closeDrawer() }"
+      @change-map="(m) => { setMap(m); closeDrawer() }"
+      @change-variant="(v) => { setVariant(v); closeDrawer() }"
+      @change-floor="(f) => { setFloor(f); closeDrawer() }"
+      @change-event="(e) => { setEvent(e); closeDrawer() }"
+      @focus-region="(r) => { focusRegion(r); closeDrawer() }"
       @toggle-layer="toggleLayer"
-      @select-all-layers="selectAllLayers"
-      @clear-all-layers="clearAllLayers"
+      @select-all-layers="(l) => { selectAllLayers(l); closeDrawer() }"
+      @clear-all-layers="(l) => { clearAllLayers(l); closeDrawer() }"
     />
 
     <main class="workspace" :class="{ 'workspace--rocom': isRocomMode }">
+      <!-- 移动端顶部栏（仅rocom模式） -->
+      <div v-if="isRocomMode" class="rocom-topbar-mobile">
+        <div class="rocom-topbar__left">
+          <button class="rocom-hamburger" @click="toggleDrawer">
+            {{ drawerOpen ? '✕' : '☰' }}
+          </button>
+          <div class="rocom-topbar__title">
+            洛克王国
+            <small>{{ view?.currentMap.name ?? '' }}</small>
+          </div>
+        </div>
+        <button class="rocom-search-btn" @click="toggleDrawer">🔍</button>
+      </div>
+
       <header v-if="!isRocomMode" class="workspace-topbar">
         <div>
           <p class="eyebrow">Visual Tactical Replica</p>
@@ -145,6 +186,7 @@ onMounted(() => {
         :view="view"
         :active-event="activeEvent"
         :mode-slug="view?.currentMode?.slug ?? ''"
+        :class="{ 'is-visible': !isRocomMode || inspectorVisible }"
       />
 
       <div v-if="error" class="status-banner status-banner--error">{{ error }}</div>
