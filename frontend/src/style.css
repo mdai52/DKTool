@@ -616,14 +616,28 @@ button {
 .toolbar-button {
   display: flex;
   flex-direction: column;
-  align-items: flex-start;
-  gap: 3px;
-  padding: 12px 14px;
-  border-radius: 18px;
+  align-items: center;
+  gap: 2px;
+  padding: 10px 12px;
+  border-radius: 16px;
   border: 1px solid rgba(255, 255, 255, 0.08);
   background: rgba(9, 16, 18, 0.86);
   color: var(--text);
   transition: transform 160ms ease, border-color 160ms ease, background 160ms ease;
+}
+
+.toolbar-button__icon {
+  font-size: 20px;
+  line-height: 1;
+}
+
+.toolbar-button__label {
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.toolbar-button__sub {
+  display: none;
 }
 
 .toolbar-button:hover {
@@ -1613,6 +1627,7 @@ button {
 
   .theme-rocom .workspace--rocom {
     order: 1;
+    flex-shrink: 0;
   }
 
   .theme-rocom .sidebar--rocom {
@@ -1622,79 +1637,192 @@ button {
     overflow: visible;
   }
 
-  .mode-strip {
-    grid-template-columns: repeat(auto-fit, minmax(96px, 1fr));
-  }
-
-  .theme-rocom .rocom-hero {
-    padding: 18px 18px 16px;
-    border-radius: 26px;
-  }
-
-  .theme-rocom .rocom-hero__actions {
-    grid-template-columns: 1fr;
-  }
-
-  .theme-rocom .search-input--rocom {
-    grid-template-columns: 46px minmax(0, 1fr) 72px;
-  }
-
-  .theme-rocom .rocom-compact-grid {
-    grid-template-columns: 1fr;
-  }
-
+  /* ===== 手机端：地图区域优先，最大化高度 ===== */
   .workspace--rocom {
-    padding: 12px 12px 20px;
+    padding: 10px 10px 12px;
   }
 
   .theme-rocom .workspace--rocom .map-stage {
-    height: min(64svh, 620px);
-    border-radius: 28px;
+    height: 58svh;
+    border-radius: 22px;
     border: 1px solid rgba(102, 170, 187, 0.18);
-    box-shadow: 0 22px 36px rgba(18, 43, 84, 0.2);
+    box-shadow: 0 18px 32px rgba(18, 43, 84, 0.2);
   }
 
+  /* HUD 徽章更紧凑 */
   .workspace--rocom .map-stage__hud {
-    left: 12px;
-    right: 12px;
-    bottom: 12px;
+    left: 8px;
+    right: 8px;
+    bottom: 8px;
+    gap: 6px;
   }
 
   .workspace--rocom .map-stage__badge {
-    padding: 8px 10px;
-    border-radius: 14px;
+    padding: 6px 10px;
+    border-radius: 12px;
+    font-size: 11px;
   }
 
-  .theme-rocom .toolbar-rail--rocom {
-    position: static;
-    width: auto;
+  /* ===== 手机端：工具栏改为底部浮动图标栏 ===== */
+  .toolbar-rail--rocom {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    z-index: 999;
     display: flex;
     flex-direction: row;
-    gap: 10px;
-    overflow-x: auto;
-    padding-bottom: 4px;
-    margin-top: 12px;
-    scroll-snap-type: x proximity;
+    justify-content: center;
+    gap: 4px;
+    padding: 8px 12px calc(8px + env(safe-area-inset-bottom));
+    background: linear-gradient(180deg, rgba(247,252,255,0) 0%, rgba(247,252,255,0.92) 20%, rgba(241,249,255,0.96) 100%);
+    border-top: 1px solid rgba(102, 170, 187, 0.16);
+    backdrop-filter: blur(16px);
+    margin-top: 0;
+    overflow-x: visible;
   }
 
   .toolbar-rail--rocom > * {
-    flex-basis: 100px;
-    scroll-snap-align: start;
+    flex: 1 1 0;
+    max-width: 72px;
   }
 
   .theme-rocom .toolbar-button,
   .theme-rocom .toolbar-rail__event {
-    min-height: 70px;
-    padding: 10px 12px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 1px;
+    min-height: 48px;
+    padding: 6px 4px;
+    border-radius: 14px;
+    font-size: 10px;
   }
 
+  .theme-rocom .toolbar-button__icon {
+    font-size: 20px;
+  }
+
+  .theme-rocom .toolbar-button__label {
+    font-size: 10px;
+    font-weight: 600;
+  }
+
+  .theme-rocom .toolbar-rail__event span {
+    display: none;
+  }
+
+  .theme-rocom .toolbar-rail__event strong {
+    font-size: 11px;
+  }
+
+  /* ===== 手机端：侧边栏紧凑化 ===== */
+  .mode-strip {
+    grid-template-columns: repeat(auto-fit, minmax(88px, 1fr));
+    gap: 8px;
+  }
+
+  .mode-tab {
+    min-height: 38px;
+    padding: 0 10px;
+    border-radius: 14px;
+    font-size: 13px;
+  }
+
+  .theme-rocom .rocom-hero {
+    padding: 14px 14px 12px;
+    border-radius: 22px;
+  }
+
+  .theme-rocom .rocom-hero h1 {
+    font-size: clamp(1.8rem, 6vw, 2.6rem);
+  }
+
+  .theme-rocom .rocom-hero__subtitle {
+    font-size: 13px;
+  }
+
+  .theme-rocom .rocom-hero__stats {
+    gap: 6px;
+    margin-top: 10px;
+  }
+
+  .rocom-stat {
+    min-height: 26px;
+    padding: 0 10px;
+    font-size: 11px;
+  }
+
+  .theme-rocom .rocom-hero__actions {
+    grid-template-columns: 1fr;
+    gap: 8px;
+    margin-top: 12px;
+  }
+
+  .rocom-action {
+    min-height: 40px;
+    border-radius: 14px;
+    font-size: 14px;
+  }
+
+  /* 搜索框紧凑 */
+  .theme-rocom .search-input--rocom {
+    grid-template-columns: 40px minmax(0, 1fr) 64px;
+    border-radius: 16px;
+  }
+
+  .search-input--rocom input {
+    min-height: 42px;
+    font-size: 14px;
+  }
+
+  .search-input__submit {
+    font-size: 13px;
+  }
+
+  /* 控件网格单列 */
+  .theme-rocom .rocom-compact-grid {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+
+  .control-field--rocom select {
+    min-height: 38px;
+    font-size: 14px;
+    border-radius: 12px;
+  }
+
+  /* 图层列表紧凑 */
+  .theme-rocom .layer-tile--rocom {
+    padding: 8px 10px;
+    border-radius: 14px;
+  }
+
+  .theme-rocom .layer-tile__icon--rocom {
+    width: 26px;
+    height: 26px;
+  }
+
+  .theme-rocom .layer-tile__icon--rocom img {
+    width: 18px;
+    height: 18px;
+  }
+
+  .theme-rocom .layer-tile__name--rocom {
+    font-size: 13px;
+  }
+
+  /* 检查面板全宽，底部留工具栏空间 */
   .theme-rocom .inspector--rocom {
     position: static;
     width: auto;
     min-width: 0;
     max-height: none;
-    margin-top: 12px;
-    border-radius: 26px;
+    margin-top: 10px;
+    margin-bottom: 70px;
+    border-radius: 20px;
+    padding: 14px;
   }
 
   .theme-rocom .sidebar-section--rocom-list,
@@ -1703,35 +1831,61 @@ button {
     max-height: none;
     padding-bottom: 18px;
   }
+
+  .section-title--rocom {
+    padding-bottom: 8px;
+  }
 }
 
 @media (max-width: 560px) {
   .theme-rocom .sidebar {
-    padding: 12px 12px 16px;
+    padding: 10px 10px 14px;
   }
 
   .theme-rocom .rocom-hero h1 {
-    font-size: clamp(2rem, 10vw, 2.8rem);
+    font-size: clamp(1.6rem, 8vw, 2.2rem);
   }
 
   .theme-rocom .rocom-hero__subtitle {
-    font-size: 14px;
-    letter-spacing: 0.03em;
+    font-size: 12px;
+    letter-spacing: 0.02em;
   }
 
   .theme-rocom .layer-tile--rocom {
-    padding: 10px 10px;
+    padding: 8px 8px;
   }
 
-  .workspace--rocom .map-stage {
-    height: min(56svh, 500px);
+  .workspace--rocom {
+    padding: 8px 8px 10px;
+  }
+
+  .theme-rocom .workspace--rocom .map-stage {
+    height: 55svh;
+    border-radius: 18px;
   }
 
   .toolbar-rail--rocom {
-    gap: 8px;
+    gap: 2px;
+    padding: 6px 8px calc(6px + env(safe-area-inset-bottom));
   }
 
   .toolbar-rail--rocom > * {
-    flex-basis: 92px;
+    max-width: 64px;
+  }
+
+  .theme-rocom .toolbar-button,
+  .theme-rocom .toolbar-rail__event {
+    min-height: 44px;
+    padding: 5px 3px;
+  }
+
+  .theme-rocom .toolbar-button__icon {
+    font-size: 18px;
+  }
+
+  .theme-rocom .toolbar-button__label {
+    font-size: 9px;
+  }
+}
   }
 }
