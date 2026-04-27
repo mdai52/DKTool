@@ -1,0 +1,16 @@
+frontend/node_modules/
+frontend/dist/
+backend/web/dist/
+backend/data/*
+!backend/data/dktool.seed.db
+backend/data/*.db-shm
+backend/data/*.db-wal
+backend/*.db
+backend/*.db-shm
+backend/*.db-wal
+backend/server
+output/
+output/data/
+.playwright-mcp/
+.playwright-cli/
+.DS_Store

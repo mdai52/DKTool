@@ -1,0 +1,44 @@
+pipeline:
+  name: dktool-build
+  stages:
+    - name: build
+      jobs:
+        - name: build-docker-image
+          image: docker:24-dind
+          steps:
+            - name: Build Docker Image
+              run: |
+                docker build -t dktool:${CNB_COMMIT_SHA} .
+                docker tag dktool:${CNB_COMMIT_SHA} dktool:latest
+                docker save dktool:latest | gzip > dktool-image.tar.gz
+                
+    - name: push-artifacts
+      jobs:
+        - name: push-to-registry
+          image: cnb.cool/cnb/cnb-cli:latest
+          steps:
+            - name: Push Docker Image to CNB Registry
+              run: |
+                echo "Pushing Docker image to CNB registry..."
+                # 登录 CNB 制品库
+                echo "${CNB_TOKEN}" | docker login ${CNB_REGISTRY_HOST} -u "${CNB_TOKEN}" --password-stdin
+                
+                # 推送镜像
+                docker tag dktool:latest ${CNB_REGISTRY_HOST}/${CNB_REPO}/dktool:${CNB_COMMIT_SHA}
+                docker tag dktool:latest ${CNB_REGISTRY_HOST}/${CNB_REPO}/dktool:latest
+                docker push ${CNB_REGISTRY_HOST}/${CNB_REPO}/dktool:${CNB_COMMIT_SHA}
+                docker push ${CNB_REGISTRY_HOST}/${CNB_REPO}/dktool:latest
+                
+                echo "Image pushed successfully!"
+                echo "Image: ${CNB_REGISTRY_HOST}/${CNB_REPO}/dktool:${CNB_COMMIT_SHA}"
+                
+            - name: Push Image Archive
+              run: |
+                echo "Pushing image archive to CNB artifacts..."
+                # 推送镜像压缩包作为制品
+                cnb-cli artifact upload \
+                  --name "dktool-image-${CNB_COMMIT_SHA}.tar.gz" \
+                  --file dktool-image.tar.gz \
+                  --type "docker-image"
+                
+                echo "Artifact uploaded successfully!"

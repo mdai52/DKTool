@@ -1,0 +1,13 @@
+services:
+  dktool:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8080:8080"
+    volumes:
+      - dktool-data:/app/runtime-data
+    restart: unless-stopped
+
+volumes:
+  dktool-data:
