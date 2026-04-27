@@ -1418,6 +1418,90 @@ button {
   height: 24px;
 }
 
+@media (min-width: 901px) {
+  /* ===== PC桌面端：确保rocom主题始终使用双列Grid布局 ===== */
+  .theme-rocom.app-shell,
+  .theme-rocom.app-shell.app-shell--wide {
+    display: grid !important;
+    grid-template-columns: clamp(320px, 28vw, 430px) minmax(0, 1fr) !important;
+    height: 100vh !important;
+    min-height: 100vh !important;
+    overflow: hidden !important;
+    position: relative !important;
+  }
+
+  .theme-rocom .sidebar {
+    position: relative !important;
+    top: auto !important;
+    left: auto !important;
+    bottom: auto !important;
+    width: auto !important;
+    max-width: none !important;
+    z-index: auto !important;
+    transform: none !important;
+    transition: none !important;
+    padding: 20px 18px 18px !important;
+    border-right: 1px solid rgba(82, 158, 178, 0.18) !important;
+    border-bottom: 0 !important;
+    box-shadow: none !important;
+    overflow: hidden !important;
+  }
+
+  .theme-rocom .workspace--rocom {
+    order: 0 !important;
+    flex: none !important;
+    min-height: 0 !important;
+    padding: 0 !important;
+    position: relative !important;
+    overflow: hidden !important;
+  }
+
+  .theme-rocom .workspace--rocom .map-stage {
+    height: 100vh !important;
+    border-radius: 0 !important;
+    border: 0 !important;
+    box-shadow: none !important;
+  }
+
+  .theme-rocom .toolbar-rail--rocom {
+    position: absolute !important;
+    top: 94px !important;
+    right: 18px !important;
+    bottom: auto !important;
+    left: auto !important;
+    width: 118px !important;
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 10px !important;
+    z-index: 850 !important;
+  }
+
+  .theme-rocom .inspector--rocom {
+    position: absolute !important;
+    right: 150px !important;
+    bottom: 24px !important;
+    left: auto !important;
+    top: auto !important;
+    width: clamp(300px, 28vw, 420px) !important;
+    min-width: 260px !important;
+    max-height: calc(100vh - 48px) !important;
+    border-radius: 24px !important;
+    margin: 0 !important;
+    padding: 18px !important;
+    transform: none !important;
+    transition: none !important;
+    overflow: auto !important;
+  }
+
+  .mobile-overlay {
+    display: none !important;
+  }
+
+  .rocom-topbar-mobile {
+    display: none !important;
+  }
+}
+
 @media (max-width: 900px) {
   body {
     overflow: auto;
@@ -1529,7 +1613,7 @@ button {
 
   .theme-rocom.app-shell,
   .theme-rocom.app-shell.app-shell--wide {
-    display: grid;
+    display: grid !important;
     grid-template-columns: 360px 1fr;
     height: 100vh;
     min-height: 100vh;
@@ -1626,41 +1710,41 @@ button {
 
   .theme-rocom.app-shell,
   .theme-rocom.app-shell.app-shell--wide {
-    display: flex;
-    flex-direction: column;
-    height: 100vh;
-    height: 100dvh;
-    min-height: 100vh;
-    min-height: 100dvh;
-    overflow: hidden;
-    position: relative;
+    display: flex !important;
+    flex-direction: column !important;
+    height: 100vh !important;
+    height: 100dvh !important;
+    min-height: 100vh !important;
+    min-height: 100dvh !important;
+    overflow: hidden !important;
+    position: relative !important;
   }
 
   /* 侧边栏 → 左侧抽屉（默认隐藏） */
   .theme-rocom .sidebar--rocom {
-    position: fixed;
-    top: 0;
-    left: 0;
-    bottom: 0;
-    width: 85vw;
-    max-width: 340px;
-    z-index: 2000;
+    position: fixed !important;
+    top: 0 !important;
+    left: 0 !important;
+    bottom: 0 !important;
+    width: 85vw !important;
+    max-width: 340px !important;
+    z-index: 2000 !important;
     background:
       radial-gradient(circle at top right, rgba(255,255,255,0.95), transparent 28%),
-      linear-gradient(180deg, rgba(247,253,255,0.98) 0%, rgba(228,246,255,0.97) 55%, rgba(215,237,246,0.96) 100%);
-    border-right: 1px solid rgba(82,158,178,0.2);
-    box-shadow: 8px 0 40px rgba(0,0,0,0.15);
-    transform: translateX(-100%);
-    transition: transform 0.35s cubic-bezier(0.32, 0.72, 0, 1);
-    padding: 16px 16px 24px;
-    overflow-y: auto;
+      linear-gradient(180deg, rgba(247,253,255,0.98) 0%, rgba(228,246,255,0.97) 55%, rgba(215,237,246,0.96) 100%) !important;
+    border-right: 1px solid rgba(82,158,178,0.2) !important;
+    box-shadow: 8px 0 40px rgba(0,0,0,0.15) !important;
+    transform: translateX(-100%) !important;
+    transition: transform 0.35s cubic-bezier(0.32, 0.72, 0, 1) !important;
+    padding: 16px 16px 24px !important;
+    overflow-y: auto !important;
     -webkit-overflow-scrolling: touch;
-    border-bottom: none;
+    border-bottom: none !important;
   }
 
   /* 抽屉打开状态 */
   .theme-rocom .sidebar--rocom.is-drawer-open {
-    transform: translateX(0);
+    transform: translateX(0) !important;
   }
 
   /* 遮罩层 */
@@ -1679,20 +1763,20 @@ button {
 
   /* 工作区 = 全屏地图容器 */
   .theme-rocom .workspace--rocom {
-    order: 1;
-    flex: 1;
-    min-height: 0;
-    padding: 0;
-    position: relative;
-    overflow: hidden;
+    order: 1 !important;
+    flex: 1 1 0% !important;
+    min-height: 0 !important;
+    padding: 0 !important;
+    position: relative !important;
+    overflow: hidden !important;
   }
 
   /* 地图全屏 */
   .theme-rocom .workspace--rocom .map-stage {
     height: 100% !important;
-    border-radius: 0;
-    border: none;
-    box-shadow: none;
+    border-radius: 0 !important;
+    border: none !important;
+    box-shadow: none !important;
   }
 
   /* ===== 顶部信息条（极简浮动）===== */
@@ -1776,7 +1860,7 @@ button {
   .workspace--rocom .map-stage__hud {
     position: absolute;
     right: 10px;
-    bottom: 72px;  /* 留出底部工具栏空间 */
+    bottom: 72px;
     left: auto;
     top: auto;
     display: flex;
@@ -1809,55 +1893,54 @@ button {
 
   /* ===== 工具栏：右下角圆形按钮组（游戏HUD风格）===== */
   .toolbar-rail--rocom {
-    position: absolute;
-    right: 10px;
-    bottom: 14px;
-    bottom: calc(14px + env(safe-area-inset-bottom));
-    left: auto;
-    top: auto;
-    z-index: 850;
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-    width: auto;
-    padding: 0;
-    background: none;
-    border: none;
-    backdrop-filter: none;
+    position: absolute !important;
+    right: 10px !important;
+    bottom: 14px !important;
+    bottom: calc(14px + env(safe-area-inset-bottom)) !important;
+    left: auto !important;
+    top: auto !important;
+    z-index: 850 !important;
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 8px !important;
+    width: auto !important;
+    padding: 0 !important;
+    background: none !important;
+    border: none !important;
+    backdrop-filter: none !important;
   }
 
   .toolbar-rail--rocom > * {
-    flex: none;
-    max-width: none;
+    flex: none !important;
+    max-width: none !important;
   }
 
   /* 隐藏事件卡片在手机端 */
   .theme-rocom .toolbar-rail__event {
-    display: none;
+    display: none !important;
   }
 
   /* 圆形游戏风格按钮 */
-  .theme-rocom .toolbar-button,
-  .theme-rocom .toolbar-rail__event {
-    display: grid;
-    place-items: center;
-    width: 46px;
-    height: 46px;
-    min-height: 46px;
-    padding: 0;
-    border-radius: 50%;
-    border: 1px solid rgba(255,255,255,0.18);
-    background: rgba(10,20,35,0.75);
-    backdrop-filter: blur(12px);
-    box-shadow: 0 4px 14px rgba(0,0,0,0.25), inset 0 0 0 1px rgba(255,255,255,0.05);
-    color: #fff;
-    transition: transform 0.12s ease, background 0.12s ease;
-    -webkit-tap-highlight-color: transparent;
+  .theme-rocom .toolbar-button {
+    display: grid !important;
+    place-items: center !important;
+    width: 46px !important;
+    height: 46px !important;
+    min-height: 46px !important;
+    padding: 0 !important;
+    border-radius: 50% !important;
+    border: 1px solid rgba(255,255,255,0.18) !important;
+    background: rgba(10,20,35,0.75) !important;
+    backdrop-filter: blur(12px) !important;
+    box-shadow: 0 4px 14px rgba(0,0,0,0.25), inset 0 0 0 1px rgba(255,255,255,0.05) !important;
+    color: #fff !important;
+    transition: transform 0.12s ease, background 0.12s ease !important;
+    -webkit-tap-highlight-color: transparent !important;
   }
 
   .theme-rocom .toolbar-button:active {
-    transform: scale(0.9);
-    background: rgba(19,242,160,0.3);
+    transform: scale(0.9) !important;
+    background: rgba(19,242,160,0.3) !important;
   }
 
   .theme-rocom .toolbar-button__icon {
@@ -1867,35 +1950,35 @@ button {
 
   .theme-rocom .toolbar-button__label,
   .theme-rocom .toolbar-button__sub {
-    display: none;
+    display: none !important;
   }
 
   /* ===== 详情面板：底部卡片（半屏）===== */
   .theme-rocom .inspector--rocom {
-    position: fixed;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    z-index: 1900;
-    width: 100%;
-    min-width: 0;
-    max-height: 52vh;
-    border-radius: 20px 20px 0 0;
-    margin: 0;
-    padding: 14px 16px;
-    padding-bottom: calc(14px + env(safe-area-inset-bottom));
-    background: linear-gradient(180deg, rgba(247,252,255,0.97) 0%, rgba(240,248,255,0.98) 100%);
-    border: 1px solid rgba(102,170,187,0.15);
-    border-bottom: none;
-    box-shadow: 0 -8px 40px rgba(0,0,0,0.15);
-    transform: translateY(100%);
-    transition: transform 0.32s cubic-bezier(0.32, 0.72, 0, 1);
-    overflow-y: auto;
+    position: fixed !important;
+    left: 0 !important;
+    right: 0 !important;
+    bottom: 0 !important;
+    z-index: 1900 !important;
+    width: 100% !important;
+    min-width: 0 !important;
+    max-height: 52vh !important;
+    border-radius: 20px 20px 0 0 !important;
+    margin: 0 !important;
+    padding: 14px 16px !important;
+    padding-bottom: calc(14px + env(safe-area-inset-bottom)) !important;
+    background: linear-gradient(180deg, rgba(247,252,255,0.97) 0%, rgba(240,248,255,0.98) 100%) !important;
+    border: 1px solid rgba(102,170,187,0.15) !important;
+    border-bottom: none !important;
+    box-shadow: 0 -8px 40px rgba(0,0,0,0.15) !important;
+    transform: translateY(100%) !important;
+    transition: transform 0.32s cubic-bezier(0.32, 0.72, 0, 1) !important;
+    overflow-y: auto !important;
     -webkit-overflow-scrolling: touch;
   }
 
   .theme-rocom .inspector--rocom.is-visible {
-    transform: translateY(0);
+    transform: translateY(0) !important;
   }
 
   /* 拖拽指示条 */
@@ -1913,13 +1996,13 @@ button {
 
   /* 侧边栏内部样式适配抽屉模式 */
   .theme-rocom .sidebar {
-    padding: 16px 16px 24px;
-    gap: 14px;
+    padding: 16px 16px 24px !important;
+    gap: 14px !important;
   }
 
   .mode-strip {
-    grid-template-columns: repeat(auto-fit, minmax(90px, 1fr));
-    gap: 8px;
+    grid-template-columns: repeat(auto-fit, minmax(90px, 1fr)) !important;
+    gap: 8px !important;
   }
 
   .mode-tab {
@@ -1930,12 +2013,12 @@ button {
   }
 
   .theme-rocom .rocom-hero {
-    padding: 16px 16px 14px;
-    border-radius: 20px;
+    padding: 16px 16px 14px !important;
+    border-radius: 20px !important;
   }
 
   .theme-rocom .rocom-hero h1 {
-    font-size: clamp(1.7rem, 6vw, 2.4rem);
+    font-size: clamp(1.7rem, 6vw, 2.4rem) !important;
   }
 
   .theme-rocom .rocom-hero__subtitle {
@@ -1954,8 +2037,8 @@ button {
   }
 
   .theme-rocom .rocom-hero__actions {
-    grid-template-columns: 1fr 1fr;
-    gap: 8px;
+    grid-template-columns: 1fr 1fr !important;
+    gap: 8px !important;
     margin-top: 12px;
   }
 
@@ -1967,8 +2050,8 @@ button {
 
   /* 搜索框 */
   .theme-rocom .search-input--rocom {
-    grid-template-columns: 38px minmax(0,1fr) 60px;
-    border-radius: 15px;
+    grid-template-columns: 38px minmax(0,1fr) 60px !important;
+    border-radius: 15px !important;
   }
 
   .search-input--rocom input {
@@ -1982,8 +2065,8 @@ button {
 
   /* 控件单列 */
   .theme-rocom .rocom-compact-grid {
-    grid-template-columns: 1fr;
-    gap: 8px;
+    grid-template-columns: 1fr !important;
+    gap: 8px !important;
   }
 
   .control-field--rocom select {
@@ -1994,14 +2077,14 @@ button {
 
   /* 图层列表 */
   .theme-rocom .layer-groups--rocom {
-    gap: 16px;
-    padding-bottom: 24px;
-    max-height: none;
-    overflow: visible;
+    gap: 16px !important;
+    padding-bottom: 24px !important;
+    max-height: none !important;
+    overflow: visible !important;
   }
 
   .theme-rocom .layer-group__header--rocom {
-    padding: 0 0 8px;
+    padding: 0 0 8px !important;
   }
 
   .theme-rocom .layer-group__header--rocom strong {
@@ -2009,23 +2092,23 @@ button {
   }
 
   .theme-rocom .layer-grid--rocom {
-    grid-template-columns: 1fr 1fr;
-    gap: 8px;
+    grid-template-columns: 1fr 1fr !important;
+    gap: 8px !important;
   }
 
   .theme-rocom .layer-tile--rocom {
-    padding: 10px 10px;
-    border-radius: 14px;
+    padding: 10px 10px !important;
+    border-radius: 14px !important;
   }
 
   .theme-rocom .layer-tile__icon--rocom {
-    width: 28px;
-    height: 28px;
+    width: 28px !important;
+    height: 28px !important;
   }
 
   .theme-rocom .layer-tile__icon--rocom img {
-    width: 20px;
-    height: 20px;
+    width: 20px !important;
+    height: 20px !important;
   }
 
   .theme-rocom .layer-tile__name--rocom {
@@ -2042,8 +2125,8 @@ button {
 
   .theme-rocom .sidebar-section--rocom-list,
   .theme-rocom .layer-groups--rocom {
-    overflow: visible;
-    max-height: none;
+    overflow: visible !important;
+    max-height: none !important;
   }
 }
 
